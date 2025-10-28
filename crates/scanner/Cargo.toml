@@ -1,0 +1,19 @@
+[package]
+name = "scanner"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+webhound-core = { path = "../core" }
+anyhow = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tracing = "0.1"
+
+reqwest = { version = "0.11", features = ["rustls-tls","gzip","brotli","deflate","cookies","json","http2","stream"] }
+select = "0.6"
+sha2 = "0.10"
+url = "2"
+regex = "1"
+serde_json = "1"
+headless_chrome = "1.0"
+

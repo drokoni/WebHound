@@ -1,0 +1,17 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+work-core = { path = "../core" }
+work-scanner = { path = "../scanner" }
+work-analyzer = { path = "../analyzer" }
+work-server = { path = "../server" }
+
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+camino = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
