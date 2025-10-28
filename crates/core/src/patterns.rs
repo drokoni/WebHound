@@ -1,8 +1,7 @@
 use once_cell::sync::Lazy;
-use regex::{Regex,RegexSet, RegexBuilder};
+use regex::{Regex, RegexBuilder, RegexSet};
 use serde::Deserialize;
 use std::borrow::Cow;
-
 
 #[derive(Debug)]
 pub struct PatternSpec {
@@ -67,8 +66,8 @@ const GITLEAKS_TOML: &str = webhound_config::RULS_TOML;
 fn compile_with_bigger_limits(pat: &str) -> Result<Regex, regex::Error> {
     RegexBuilder::new(pat)
         // подними лимиты, чтобы влезали большие объединения
-        .size_limit(64 * 1024 * 1024)        // 64 MiB на таблицы
-        .dfa_size_limit(64 * 1024 * 1024)    // 64 MiB на DFA
+        .size_limit(64 * 1024 * 1024) // 64 MiB на таблицы
+        .dfa_size_limit(64 * 1024 * 1024) // 64 MiB на DFA
         .build()
 }
 
@@ -106,8 +105,8 @@ fn build_lightweight_regex_from_keywords(keywords: &[String]) -> Option<(Regex, 
 
 // ====== Глобальный список правил (с компиляцией и фоллбэком) ======
 pub static PATTERNS: Lazy<Vec<PatternSpec>> = Lazy::new(|| {
-    let cfg: GitleaksConfig = toml::from_str(GITLEAKS_TOML)
-        .expect("BUG: не удалось распарсить src/config/gitleaks.toml");
+    let cfg: GitleaksConfig =
+        toml::from_str(GITLEAKS_TOML).expect("BUG: не удалось распарсить src/config/gitleaks.toml");
 
     let mut out: Vec<PatternSpec> = Vec::new();
 
@@ -202,7 +201,7 @@ pub fn normalize_value(s: &str) -> Cow<'_, str> {
         || (t.starts_with('\'') && t.ends_with('\''))
         || (t.starts_with('`') && t.ends_with('`'))
     {
-        Cow::from(&t[1..t.len()-1])
+        Cow::from(&t[1..t.len() - 1])
     } else {
         Cow::from(t)
     }
@@ -210,8 +209,8 @@ pub fn normalize_value(s: &str) -> Cow<'_, str> {
 
 pub fn should_ignore_value(raw: &str) -> bool {
     let v = normalize_value(raw);
-    if v.len() <= 2 { 
-        return true; 
+    if v.len() <= 2 {
+        return true;
     }
     IGNORE_VALUE_REGEXES.is_match(&v)
 }
@@ -219,4 +218,3 @@ pub fn should_ignore_value(raw: &str) -> bool {
 pub fn should_ignore_path(path_like: &str) -> bool {
     IGNORE_PATH_REGEXES.is_match(path_like)
 }
-

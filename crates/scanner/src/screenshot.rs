@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result as AnyResult};
+use anyhow::{Result as AnyResult, anyhow};
 use headless_chrome::protocol::page::ScreenshotFormat;
 use std::path::Path;
 use tokio::task;
@@ -41,7 +41,9 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
                 }
             }
         }
-        Err(anyhow!("Не удалось создать вкладку после повторной попытки"))
+        Err(anyhow!(
+            "Не удалось создать вкладку после повторной попытки"
+        ))
     })
     .await
     .map_err(|e| anyhow!("JoinError: {e}"))??;
@@ -54,4 +56,3 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
     std::fs::write(&path, &data).map_err(|e| anyhow!("Запись файла {:?}: {e}", path))?;
     Ok(())
 }
-

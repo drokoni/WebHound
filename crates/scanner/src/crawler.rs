@@ -1,5 +1,5 @@
-use webhound_core::gitleaks::{should_ignore_path, should_ignore_value, PATTERNS};
-use webhound_core::utils::{save_bytes, sanitize_filename, write_str_to_file};
+use webhound_core::gitleaks::{PATTERNS, should_ignore_path, should_ignore_value};
+use webhound_core::utils::{sanitize_filename, save_bytes, write_str_to_file};
 
 use crate::net::fetch_live_or_wayback;
 use crate::screenshot::make_screenshot_task;
@@ -14,8 +14,8 @@ use url::Url;
 
 // какие текстовые форматы дополнительно скачивать из HTML
 const INTERESTING_EXTS: &[&str] = &[
-    "js", "php", "txt", "json", "xml", "csv", "ini", "conf", "config",
-    "env", "yaml", "yml", "log", "bak", "old", "sql",
+    "js", "php", "txt", "json", "xml", "csv", "ini", "conf", "config", "env", "yaml", "yml", "log",
+    "bak", "old", "sql",
 ];
 
 // спец-файлы по имени
@@ -109,51 +109,60 @@ pub trait PathsLike: Send + Sync {
     fn assets_dir(&self) -> &Path;
 }
 
-
 fn url_looks_html(u: &str) -> bool {
     if let Some(ext) = guess_ext_from_url(u) {
-        return matches!(ext, "html" | "htm" | "shtml" | "php" | "asp" | "aspx" | "jsp");
+        return matches!(
+            ext,
+            "html" | "htm" | "shtml" | "php" | "asp" | "aspx" | "jsp"
+        );
     }
     // без расширения — считаем HTML
     true
 }
 
 fn guess_ext_from_url(u: &str) -> Option<&'static str> {
-    Url::parse(u).ok()?.path().rsplit('/').next().and_then(|name| {
-        if let Some((_, ext)) = name.rsplit_once('.') {
-            let e = ext.to_ascii_lowercase();
-            // нормализуем известные
-            match e.as_str() {
-                "js" => Some("js"),
-                "php" => Some("php"),
-                "txt" => Some("txt"),
-                "json" => Some("json"),
-                "xml" => Some("xml"),
-                "csv" => Some("csv"),
-                "ini" => Some("ini"),
-                "conf" | "config" => Some("conf"),
-                "env" => Some("env"),
-                "yaml" => Some("yaml"),
-                "yml" => Some("yml"),
-                "log" => Some("log"),
-                "bak" => Some("bak"),
-                "old" => Some("old"),
-                "sql" => Some("sql"),
-                "html" => Some("html"),
-                "htm" => Some("htm"),
-                "asp" => Some("asp"),
-                "aspx" => Some("aspx"),
-                "jsp" => Some("jsp"),
-                _ => Some(Box::leak(e.into_boxed_str())),
+    Url::parse(u)
+        .ok()?
+        .path()
+        .rsplit('/')
+        .next()
+        .and_then(|name| {
+            if let Some((_, ext)) = name.rsplit_once('.') {
+                let e = ext.to_ascii_lowercase();
+                // нормализуем известные
+                match e.as_str() {
+                    "js" => Some("js"),
+                    "php" => Some("php"),
+                    "txt" => Some("txt"),
+                    "json" => Some("json"),
+                    "xml" => Some("xml"),
+                    "csv" => Some("csv"),
+                    "ini" => Some("ini"),
+                    "conf" | "config" => Some("conf"),
+                    "env" => Some("env"),
+                    "yaml" => Some("yaml"),
+                    "yml" => Some("yml"),
+                    "log" => Some("log"),
+                    "bak" => Some("bak"),
+                    "old" => Some("old"),
+                    "sql" => Some("sql"),
+                    "html" => Some("html"),
+                    "htm" => Some("htm"),
+                    "asp" => Some("asp"),
+                    "aspx" => Some("aspx"),
+                    "jsp" => Some("jsp"),
+                    _ => Some(Box::leak(e.into_boxed_str())),
+                }
+            } else {
+                None
             }
-        } else {
-            None
-        }
-    })
+        })
 }
 
 fn url_has_ext(u: &str, ext: &str) -> bool {
-    guess_ext_from_url(u).map(|e| e.eq_ignore_ascii_case(ext)).unwrap_or(false)
+    guess_ext_from_url(u)
+        .map(|e| e.eq_ignore_ascii_case(ext))
+        .unwrap_or(false)
 }
 
 fn root_of(u: &str) -> Option<String> {
@@ -176,7 +185,13 @@ fn extract_interesting_links(body_html: &str, base_url: &str) -> HashSet<String>
         }
     }
     // a[href], link[href]
-    for el in doc.find(select::predicate::Or(select::predicate::Name("a"), select::predicate::Name("link")).and(select::predicate::Attr("href", ()))) {
+    for el in doc.find(
+        select::predicate::Or(
+            select::predicate::Name("a"),
+            select::predicate::Name("link"),
+        )
+        .and(select::predicate::Attr("href", ())),
+    ) {
         if let Some(href) = el.attr("href") {
             if let Some(u) = join_url(base_url, href) {
                 if url_has_any_interesting_ext(&u) && !should_ignore_path(&u) {
@@ -320,5 +335,3 @@ pub async fn analyze_info(
 
     Ok(())
 }
-
-

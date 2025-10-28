@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use headless_chrome::{Browser, LaunchOptionsBuilder};
 use std::sync::{Arc, Mutex};
 
@@ -8,7 +8,9 @@ pub struct BrowserManager {
 
 impl BrowserManager {
     pub const fn new() -> Self {
-        Self { inner: Mutex::new(None) }
+        Self {
+            inner: Mutex::new(None),
+        }
     }
 
     fn launch_browser() -> Result<Arc<Browser>> {
@@ -23,8 +25,8 @@ impl BrowserManager {
             .build()
             .map_err(|e| anyhow!("building LaunchOptions: {e}"))?;
 
-        let browser = Browser::new(launch_opts)
-            .map_err(|e| anyhow!("starting headless chrome: {e}"))?;
+        let browser =
+            Browser::new(launch_opts).map_err(|e| anyhow!("starting headless chrome: {e}"))?;
         Ok(Arc::new(browser))
     }
 
@@ -62,5 +64,3 @@ impl BrowserManager {
 }
 
 pub static BROWSER_MANAGER: BrowserManager = BrowserManager::new();
-
-

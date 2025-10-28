@@ -1,12 +1,12 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use csv::Writer;
-use image::{imageops::FilterType, DynamicImage};
-use ndarray::{Array2, Array3, Array4, Axis, CowArray, Ix2, IxDyn, ArrayView2};
+use image::{DynamicImage, imageops::FilterType};
+use ndarray::{Array2, Array3, Array4, ArrayView2, Axis, CowArray, Ix2, IxDyn};
 use ort::{
+    LoggingLevel,
     environment::Environment,
     session::{Session, SessionBuilder},
     value::Value,
-    LoggingLevel,
 };
 use std::{
     fs,
@@ -50,8 +50,8 @@ impl EyeballerRunner {
             .map_err(|e| anyhow!("Environment::build: {e}"))?;
         let env = Arc::new(env);
 
-        let sb: SessionBuilder = SessionBuilder::new(&env)
-            .map_err(|e| anyhow!("SessionBuilder::new: {e}"))?;
+        let sb: SessionBuilder =
+            SessionBuilder::new(&env).map_err(|e| anyhow!("SessionBuilder::new: {e}"))?;
         let session = sb
             .with_model_from_file(model_path.as_ref())
             .map_err(|e| anyhow!("with_model_from_file: {e}"))?;
@@ -122,8 +122,7 @@ impl EyeballerRunner {
         csv_name: &str,
         html_template: Option<&str>,
     ) -> Result<(PathBuf, PathBuf)> {
-        fs::create_dir_all(out_dir)
-            .with_context(|| format!("mkdir -p {}", out_dir.display()))?;
+        fs::create_dir_all(out_dir).with_context(|| format!("mkdir -p {}", out_dir.display()))?;
 
         let csv_path = out_dir.join(csv_name);
         let mut w = Writer::from_path(&csv_path)
@@ -143,8 +142,7 @@ impl EyeballerRunner {
         let ncls = self.labels.0.len();
 
         for p in files {
-            let img = image::open(&p)
-                .with_context(|| format!("open image: {}", p.display()))?;
+            let img = image::open(&p).with_context(|| format!("open image: {}", p.display()))?;
             let img = img.resize_exact(INPUT_W as u32, INPUT_H as u32, FilterType::Triangle);
             let rgb = img.to_rgb8();
 
@@ -165,8 +163,10 @@ impl EyeballerRunner {
 
             let outputs = self.session.run(vec![input_tensor])?;
             let out = outputs[0].try_extract::<f32>()?;
-            let out2: ArrayView2<f32> =
-                out.view().into_dimensionality::<Ix2>().context("bad output rank")?;
+            let out2: ArrayView2<f32> = out
+                .view()
+                .into_dimensionality::<Ix2>()
+                .context("bad output rank")?;
 
             let mut logits = vec![0.0_f32; ncls];
             for c in 0..ncls {
@@ -182,7 +182,8 @@ impl EyeballerRunner {
                 }
             }
 
-            let basename = p.file_name()
+            let basename = p
+                .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "image.png".into());
             let rel = PathBuf::from("images").join(&basename);
@@ -193,7 +194,11 @@ impl EyeballerRunner {
 
             let mut row = vec![
                 rel.to_string_lossy().to_string(),
-                self.labels.0.get(top_i).cloned().unwrap_or_else(|| top_i.to_string()),
+                self.labels
+                    .0
+                    .get(top_i)
+                    .cloned()
+                    .unwrap_or_else(|| top_i.to_string()),
                 format!("{:.6}", top_p),
             ];
             for j in 0..ncls {
@@ -216,4 +221,3 @@ impl EyeballerRunner {
         Ok((csv_path, html_path))
     }
 }
-

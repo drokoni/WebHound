@@ -1,9 +1,9 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 use std::{fs, path::PathBuf};
 
-use work::*; // реэкспорты из lib.rs
 use work::eyeballer_onnx::{EyeballerRunner, Labels};
+use work::*; // реэкспорты из lib.rs
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
@@ -69,7 +69,11 @@ async fn main() -> Result<()> {
 
     // --- Подкоманда: только сервер ---
     if let Some(Cmd::Serv { dir, port }) = args.cmd {
-        println!("Сервер отчёта: http://127.0.0.1:{}/  (dir = {})", port, dir.display());
+        println!(
+            "Сервер отчёта: http://127.0.0.1:{}/  (dir = {})",
+            port,
+            dir.display()
+        );
         EyeballerRunner::serve(&dir, port)?;
         return Ok(());
     }
@@ -99,13 +103,8 @@ async fn main() -> Result<()> {
         args.analyze = true;
 
         let runner = EyeballerRunner::new(&args.model, Labels::eyeballer_default())?;
-        let (_csv, html) = runner.infer_to_csv_html(
-            &images_dir,
-            &out_dir,
-            args.batch,
-            "predictions.csv",
-            None,
-        )?;
+        let (_csv, html) =
+            runner.infer_to_csv_html(&images_dir, &out_dir, args.batch, "predictions.csv", None)?;
         println!("Отчёт: {}", html.display());
 
         if args.serve {
@@ -132,13 +131,8 @@ async fn main() -> Result<()> {
             .map_err(|e| anyhow!("Не создать {}: {e}", out_dir.display()))?;
 
         let runner = EyeballerRunner::new(&args.model, Labels::eyeballer_default())?;
-        let (_csv, html) = runner.infer_to_csv_html(
-            &images_dir,
-            &out_dir,
-            args.batch,
-            "predictions.csv",
-            None,
-        )?;
+        let (_csv, html) =
+            runner.infer_to_csv_html(&images_dir, &out_dir, args.batch, "predictions.csv", None)?;
         println!("Отчёт: {}", html.display());
 
         if args.serve {
@@ -149,5 +143,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
-

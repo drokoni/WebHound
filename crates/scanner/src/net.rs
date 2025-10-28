@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Result as AnyResult};
+use anyhow::{Result as AnyResult, anyhow};
 use regex::Regex;
 use reqwest::{Client, StatusCode};
 use serde_json;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 /// Получить список Wayback URL-ов по домену
 pub async fn fetch_wayback_urls(client: &Client, domain: &str) -> AnyResult<String> {
@@ -95,4 +95,3 @@ pub async fn fetch_live_or_wayback(
     let data = resp.bytes().await.map_err(|e| anyhow!(e.to_string()))?;
     Ok((data.to_vec(), archived, true))
 }
-

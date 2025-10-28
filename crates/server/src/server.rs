@@ -1,12 +1,15 @@
-use anyhow::{anyhow, Result};
-use std::{fs, path::{Path, PathBuf}};
+use anyhow::{Result, anyhow};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 /// Простой HTTP-сервер на tiny_http для отдачи сгенерированных отчётов
 pub fn serve_static(out_dir: &Path, port: u16) -> Result<()> {
     use tiny_http::{Header, Response, Server};
 
-    let server = Server::http(format!("127.0.0.1:{port}"))
-        .map_err(|e| anyhow!("Server::http: {e}"))?;
+    let server =
+        Server::http(format!("127.0.0.1:{port}")).map_err(|e| anyhow!("Server::http: {e}"))?;
     println!("Report available at: http://127.0.0.1:{port}/");
     println!("Serving from: {}", out_dir.display());
     let parent = out_dir.parent().map(Path::to_path_buf);
@@ -82,4 +85,3 @@ pub fn serve_static(out_dir: &Path, port: u16) -> Result<()> {
 
     Ok(())
 }
-

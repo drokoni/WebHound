@@ -9,7 +9,6 @@ anyhow = "1"
 tracing = "0.1"
 ndarray = "0.15"
 onnxruntime = { version = "0.0.14", features = ["load-dynamic"] } # пример
-image = "0.25"
 csv = "1"
 camino = "1"
 image = { version = "0.25", features = ["jpeg", "png", "bmp", "webp"] }

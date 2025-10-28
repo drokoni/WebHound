@@ -74,7 +74,10 @@ pub fn sanitize_filename(url: &str) -> String {
     let short = &hex[..12];
 
     let parsed = Url::parse(url).ok();
-    let host = parsed.as_ref().and_then(|u| u.host_str()).unwrap_or("unknown");
+    let host = parsed
+        .as_ref()
+        .and_then(|u| u.host_str())
+        .unwrap_or("unknown");
     let mut path = parsed
         .as_ref()
         .map(|u| u.path())
@@ -94,4 +97,3 @@ pub fn sanitize_filename(url: &str) -> String {
     }
     name
 }
-

@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-work-core = { path = "../core" }
-work-scanner = { path = "../scanner" }
-work-analyzer = { path = "../analyzer" }
-work-server = { path = "../server" }
+core = { path = "../core" }
+scanner = { path = "../scanner" }
+analyzer = { path = "../analyzer" }
+server = { path = "../server" }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
