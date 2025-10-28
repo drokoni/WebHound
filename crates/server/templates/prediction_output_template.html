@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Eyeballer ONNX Report</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          Segoe UI,
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        margin: 24px;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        font-size: 14px;
+      }
+
+      th {
+        background: #f5f5f5;
+      }
+
+      img.thumb {
+        height: 110px;
+      }
+
+      .prob {
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>Eyeballer ONNX Report</h1>
+    <p>
+      Images dir: <code>{IMAGES_DIR}</code> · CSV:
+      <a href="./{CSV_NAME}">{CSV_NAME}</a>
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Image</th>
+          <th>Top label</th>
+          <th>Top prob</th>
+          <th>All probs</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <script>
+      async function main() {
+        const csvName = "{CSV_NAME}";
+        const text = await fetch(csvName).then((r) => r.text());
+        const lines = text.trim().split(/\r?\n/);
+        const head = lines.shift().split(",");
+        const idx = Object.fromEntries(head.map((h, i) => [h, i]));
+        const rows = document.getElementById("rows");
+
+        for (const line of lines) {
+          const cols = line.split(",");
+          const file = cols[idx["file"]]; // из CSV, например: images/foo.png
+          const top = cols[idx["top_label"]];
+          const prob = Number(cols[idx["top_prob"]]).toFixed(4);
+
+          const probs = head
+            .filter((h) => h.startsWith("p_"))
+            .map((h) => `${h}=${Number(cols[idx[h]]).toFixed(4)}`)
+            .join("<br>");
+
+          // не кодируем: берём как есть; для надёжности добавляем './'
+          const src = file.startsWith("./") ? file : `./${file}`;
+
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+        <td><img class="thumb" src="${src}"
+                 onerror="this.replaceWith(document.createTextNode(file))"></td>
+        <td>${top}</td>
+        <td class="prob">${prob}</td>
+        <td class="prob">${probs}</td>`;
+          rows.appendChild(tr);
+        }
+      }
+      main();
+    </script>
+  </body>
+</html>

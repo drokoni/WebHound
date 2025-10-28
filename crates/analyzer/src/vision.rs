@@ -1,3 +1,4 @@
+use server::PREDICTION_REPORT_HTML;
 use anyhow::{Context, Result, anyhow};
 use csv::Writer;
 use image::{DynamicImage, imageops::FilterType};
@@ -212,7 +213,7 @@ impl EyeballerRunner {
         let html_path = out_dir.join("index.html");
         let html_tpl = html_template
             .map(|t| t.to_string())
-            .unwrap_or_else(|| include_str!("prediction_output_template.html").to_string());
+            .unwrap_or_else(|| PREDICTION_REPORT_HTML.to_string());
         let html = html_tpl
             .replace("{CSV_NAME}", csv_name)
             .replace("{TITLE}", "Eyeballer ONNX Report");
