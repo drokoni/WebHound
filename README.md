@@ -1,4 +1,8 @@
 ```bash
+sudo apt install chromium
+```
+
+```bash
 cat <<'EOF' >> ~/.zshrc
 # --- WebHound ONNX runtime path ---
 export ORT_DYLIB_PATH="PATH/TO/WebHound/LibPy/libonnxruntime.so.1.23.2"
