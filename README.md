@@ -1,4 +1,8 @@
 ```bash
+cargo build
+```
+
+```bash
 cat <<'EOF' >> ~/.bashrc
 # --- WebHound ONNX runtime path ---
 export ORT_DYLIB_PATH="$HOME/work/WebHound/LibPy/libonnxruntime.so.1.23.2"
@@ -8,7 +12,8 @@ EOF
 ```
 
 ---
-##  Быстрый старт
+
+## Быстрый старт
 
 ### Вариант A — оффлайн-анализ уже готовых скриншотов
 
@@ -28,7 +33,7 @@ EOF
 ./target/release/work example.com --analyze --serve --port 8000
 ```
 
-- Скриншоты сохранятся в рабочей директории сканера (см. вывод в консоли).  
+- Скриншоты сохранятся в рабочей директории сканера (см. вывод в консоли).
 - Отчёт (если включён анализ) — в `./example.com/report/`
 
 ---
@@ -45,7 +50,8 @@ EOF
 ## Режимы работы
 
 ### 1. Только инференс по папке (`--images`)
-- **Не сканирует** домен.  
+
+- **Не сканирует** домен.
 - Берёт готовые изображения, запускает Eyeballer, формирует отчёт.
 
 Параметры:
@@ -61,7 +67,9 @@ EOF
 ---
 
 ### 2. Полный цикл: скан → анализ
+
 Если указан `DOMAIN` (и не задан `--images`):
+
 - Выполняется скан домена и снятие скриншотов.
 - Если добавлен `--analyze`, запускается Eyeballer.
 - `--report DIR` — путь для сохранения отчёта.
@@ -70,6 +78,7 @@ EOF
 ---
 
 ### 3. Подкоманда `serv`
+
 Раздача уже собранного отчёта.
 
 ```bash
@@ -103,22 +112,25 @@ work serv <REPORT_DIR> [--port PORT]
 ## Примеры
 
 Анализ локальных скриншотов и сервер:
+
 ```bash
 ./target/release/work(cargo run --) --images ./shots --analyze --serve --port 9000
 ```
 
 Полный цикл + отчёт в кастомную папку:
+
 ```bash
 ./target/release/work(cargo run --) example.com --analyze --report ./out/example.com --serve
 ```
 
 Только сервер по готовому отчёту:
+
 ```bash
 ./target/release/work(cargo run --) serv ./out/example.com --port 8080
 ```
 
 Явный путь к модели и увеличенный батч:
+
 ```bash
 ./target/release/work(cargo run --) --images ./shots --model ./assets/ml/eyeballer.onnx --batch 64 --analyze
 ```
-
