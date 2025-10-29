@@ -3,6 +3,7 @@ use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 use std::{fs, path::PathBuf};
 use analyzer::vision::*;
 use server::server;
+use scanner::run_scan;
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
