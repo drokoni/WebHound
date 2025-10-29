@@ -9,7 +9,7 @@ pub async fn fetch_wayback_urls(client: &Client, domain: &str) -> AnyResult<Stri
     let resp = client
         .get("https://web.archive.org/cdx/search/cdx")
         .query(&[
-            ("url", format!("*.{}/*", domain)),
+            ("url", format!("*.{}/*",domain)),
             ("collapse", "urlkey".to_string()),
             ("output", "text".to_string()),
             ("fl", "original".to_string()),
