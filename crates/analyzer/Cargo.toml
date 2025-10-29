@@ -12,6 +12,6 @@ ndarray = "0.15"
 csv = "1"
 camino = "1"
 image = { version = "0.24.9", features = ["jpeg", "png", "bmp", "webp"] }
-ort = { version = "1.15", features = ["download-binaries"] }
 walkdir = "2"
+ort = { version = "1", default-features = false, features = ["load-dynamic"] }
 

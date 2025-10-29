@@ -17,8 +17,8 @@ use std::{
 use walkdir::WalkDir;
 
 const IMG_EXTS: &[&str] = &[".png", ".jpg", ".jpeg", ".bmp", ".webp"];
-const INPUT_W: usize = 256;
-const INPUT_H: usize = 256;
+const INPUT_W: usize = 224;
+const INPUT_H: usize = 224;
 
 #[derive(Clone)]
 pub struct Labels(pub Vec<String>);
@@ -155,9 +155,13 @@ impl EyeballerRunner {
                 hwc[(y as usize, x as usize, 2)] = b as f32 / 255.0;
             }
 
-            let chw: Array3<f32> = hwc.permuted_axes([2, 0, 1]).to_owned();
-            let input_1chw: Array4<f32> = chw.insert_axis(Axis(0));
-            let input_dyn = input_1chw.into_dyn();
+            //let chw: Array3<f32> = hwc.permuted_axes([2, 0, 1]).to_owned();
+            //let input_1chw: Array4<f32> = chw.insert_axis(Axis(0));
+            //let input_dyn = input_1chw.into_dyn();
+            
+            // стало: NHWC -> (1, H, W, C)
+            let nhwc: Array4<f32> = hwc.insert_axis(Axis(0));
+            let input_dyn = nhwc.into_dyn();
 
             let input_cow: CowArray<f32, IxDyn> = CowArray::from(input_dyn.view());
             let input_tensor = Value::from_array(self.session.allocator(), &input_cow)?;

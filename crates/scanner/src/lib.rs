@@ -4,7 +4,7 @@ pub mod net;
 pub mod screenshot;
 
 pub use crawler::{PathsLike, process_single_url};
-pub use net::{check_url_200, fetch_live_or_wayback, fetch_wayback_urls};
+pub use net::{fetch_live_or_wayback, fetch_wayback_urls};
 pub use screenshot::make_screenshot_task;
 use anyhow::Result;
 use futures::{stream, StreamExt};

@@ -1,5 +1,5 @@
 use core::patterns::{PATTERNS, should_ignore_path, should_ignore_value};
-use core::utils::{sanitize_filename, save_bytes, write_str_to_file};
+use core::utils::{sanitize_filename, save_bytes};
 
 use crate::net::fetch_live_or_wayback;
 use crate::screenshot::make_screenshot_task;

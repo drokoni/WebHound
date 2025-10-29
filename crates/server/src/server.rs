@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{Path},
 };
 
 /// Простой HTTP-сервер на tiny_http для отдачи сгенерированных отчётов
