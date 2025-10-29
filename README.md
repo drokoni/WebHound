@@ -1,8 +1,4 @@
 ```bash
-cargo build
-```
-
-```bash
 cat <<'EOF' >> ~/.bashrc
 # --- WebHound ONNX runtime path ---
 export ORT_DYLIB_PATH="$HOME/work/WebHound/LibPy/libonnxruntime.so.1.23.2"
@@ -11,41 +7,20 @@ export LD_LIBRARY_PATH="$HOME/work/WebHound/LibPy:${LD_LIBRARY_PATH}"
 EOF
 ```
 
----
-
-## Быстрый старт
-
-### Вариант A — оффлайн-анализ уже готовых скриншотов
-
 ```bash
-# В папке ./shots лежат картинки (.png/.jpg/.jpeg/.bmp/.webp)
-./target/release/work --images ./shots --analyze --serve --port 9000
+source .bashrc
+source .zshrc
 ```
 
-- Отчёт появится в `./shots/report/`
-- Открой: <http://127.0.0.1:9000/>
-
----
-
-### Вариант B — полный цикл: скан → (опц.) анализ
-
-```bash
-./target/release/work example.com --analyze --serve --port 8000
-```
-
-- Скриншоты сохранятся в рабочей директории сканера (см. вывод в консоли).
-- Отчёт (если включён анализ) — в `./example.com/report/`
-
----
-
-### Вариант C — только локальный сервер по готовому отчёту
-
-```bash
-./target/release/work serv ./report --port 8080
-# Открой: http://127.0.0.1:8080/
-```
-
----
+Параметры:
+| Параметр | Описание | По умолчанию |
+|-----------|-----------|---------------|
+| `--images DIR` | Входная папка с изображениями | — |
+| `--report DIR` | Куда положить отчёт | `DIR/report` |
+| `--model PATH` | Путь к модели `.onnx` | `crates/assets/ml/eyeballer.onnx` |
+| `--batch N` | Размер батча | `32` |
+| `--serve` | Поднять локальный сервер | — |
+| `--port N` | Порт HTTP-сервера | `8000` |
 
 ## Режимы работы
 
@@ -54,15 +29,9 @@ EOF
 - **Не сканирует** домен.
 - Берёт готовые изображения, запускает Eyeballer, формирует отчёт.
 
-Параметры:
-| Параметр | Описание | По умолчанию |
-|-----------|-----------|---------------|
-| `--images DIR` | Входная папка с изображениями | — |
-| `--report DIR` | Куда положить отчёт | `DIR/report` |
-| `--model PATH` | Путь к модели `.onnx` | `assets/ml/eyeballer.onnx` |
-| `--batch N` | Размер батча | `32` |
-| `--serve` | Поднять локальный сервер | — |
-| `--port N` | Порт HTTP-сервера | `8000` |
+```bash
+cargo run -- --images ./example.com/screenshots --model ./crates/asset/ml/eyeballer.onnx  --serve --port 9000
+```
 
 ---
 
@@ -75,6 +44,10 @@ EOF
 - `--report DIR` — путь для сохранения отчёта.
 - `--serve` и `--port` — поднять сервер после анализа.
 
+```bash
+cargo run -- example.com --model ./crates/asset/ml/eyeballer.onnx --analyze --serve --port 9000
+```
+
 ---
 
 ### 3. Подкоманда `serv`
@@ -82,7 +55,7 @@ EOF
 Раздача уже собранного отчёта.
 
 ```bash
-./work serv <REPORT_DIR> --port 8000
+cargo run serv <REPORT_DIR> --port 9000
 ```
 
 ---
@@ -105,32 +78,4 @@ work serv <REPORT_DIR> [--port PORT]
 Подкоманда:
   serv <REPORT_DIR>  Раздать готовый отчёт
     --port PORT      Порт (по умолчанию 8000)
-```
-
----
-
-## Примеры
-
-Анализ локальных скриншотов и сервер:
-
-```bash
-./target/release/work(cargo run --) --images ./shots --analyze --serve --port 9000
-```
-
-Полный цикл + отчёт в кастомную папку:
-
-```bash
-./target/release/work(cargo run --) example.com --analyze --report ./out/example.com --serve
-```
-
-Только сервер по готовому отчёту:
-
-```bash
-./target/release/work(cargo run --) serv ./out/example.com --port 8080
-```
-
-Явный путь к модели и увеличенный батч:
-
-```bash
-./target/release/work(cargo run --) --images ./shots --model ./assets/ml/eyeballer.onnx --batch 64 --analyze
 ```
