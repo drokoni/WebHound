@@ -61,7 +61,7 @@ pub struct AllowList {
     #[serde(default)]
     pub files: Vec<String>,
 }
-const GITLEAKS_TOML: &str = webhound_config::RULS_TOML;
+const RULS_TOML: &str = config::RULS_TOML;
 
 fn compile_with_bigger_limits(pat: &str) -> Result<Regex, regex::Error> {
     RegexBuilder::new(pat)
@@ -106,7 +106,7 @@ fn build_lightweight_regex_from_keywords(keywords: &[String]) -> Option<(Regex, 
 // ====== Глобальный список правил (с компиляцией и фоллбэком) ======
 pub static PATTERNS: Lazy<Vec<PatternSpec>> = Lazy::new(|| {
     let cfg: GitleaksConfig =
-        toml::from_str(GITLEAKS_TOML).expect("BUG: не удалось распарсить src/config/gitleaks.toml");
+        toml::from_str(RULS_TOML).expect("BUG: не удалось распарсить  ../../config/ruls.toml");
 
     let mut out: Vec<PatternSpec> = Vec::new();
 

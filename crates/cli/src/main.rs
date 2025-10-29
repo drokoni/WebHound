@@ -1,9 +1,8 @@
 use anyhow::{Result, anyhow};
 use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 use std::{fs, path::PathBuf};
-
-use work::eyeballer_onnx::{EyeballerRunner, Labels};
-use work::*; // реэкспорты из lib.rs
+use analyzer::vision::*;
+use server::server;
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
@@ -74,7 +73,7 @@ async fn main() -> Result<()> {
             port,
             dir.display()
         );
-        EyeballerRunner::serve(&dir, port)?;
+        server::server(&dir, port)?;
         return Ok(());
     }
 
@@ -104,12 +103,12 @@ async fn main() -> Result<()> {
 
         let runner = EyeballerRunner::new(&args.model, Labels::eyeballer_default())?;
         let (_csv, html) =
-            runner.infer_to_csv_html(&images_dir, &out_dir, args.batch, "predictions.csv", None)?;
+            runner.infer_to_csv_html(&images_dir, &out_dir, "predictions.csv", None)?;
         println!("Отчёт: {}", html.display());
 
         if args.serve {
             println!("Сервер: http://127.0.0.1:{}/", args.port);
-            EyeballerRunner::serve(&out_dir, args.port)?;
+            server::server(&out_dir, args.port)?;
         }
         return Ok(());
     }
@@ -132,12 +131,12 @@ async fn main() -> Result<()> {
 
         let runner = EyeballerRunner::new(&args.model, Labels::eyeballer_default())?;
         let (_csv, html) =
-            runner.infer_to_csv_html(&images_dir, &out_dir, args.batch, "predictions.csv", None)?;
+            runner.infer_to_csv_html(&images_dir, &out_dir, "predictions.csv", None)?;
         println!("Отчёт: {}", html.display());
 
         if args.serve {
             println!("Сервер: http://127.0.0.1:{}/", args.port);
-            EyeballerRunner::serve(&out_dir, args.port)?;
+            server::server(&out_dir, args.port)?;
         }
     }
 

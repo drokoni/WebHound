@@ -1,5 +1,5 @@
-use webhound_core::gitleaks::{PATTERNS, should_ignore_path, should_ignore_value};
-use webhound_core::utils::{sanitize_filename, save_bytes, write_str_to_file};
+use core::patterns::{PATTERNS, should_ignore_path, should_ignore_value};
+use core::utils::{sanitize_filename, save_bytes, write_str_to_file};
 
 use crate::net::fetch_live_or_wayback;
 use crate::screenshot::make_screenshot_task;

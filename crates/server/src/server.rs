@@ -5,7 +5,7 @@ use std::{
 };
 
 /// Простой HTTP-сервер на tiny_http для отдачи сгенерированных отчётов
-pub fn serve_static(out_dir: &Path, port: u16) -> Result<()> {
+pub fn server(out_dir: &Path, port: u16) -> Result<()> {
     use tiny_http::{Header, Response, Server};
 
     let server =

@@ -2,7 +2,7 @@ use anyhow::{Result as AnyResult, anyhow};
 use headless_chrome::protocol::page::ScreenshotFormat;
 use std::path::Path;
 use tokio::task;
-use webhound_core::utils::sanitize_filename;
+use core::utils::sanitize_filename;
 
 use crate::browser_manager::BROWSER_MANAGER;
 

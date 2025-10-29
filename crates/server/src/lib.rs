@@ -1,5 +1,5 @@
 pub mod server;        
 pub mod templates;
 
-pub use server::serve_static;
+pub use server::server;
 pub use templates::PREDICTION_REPORT_HTML;

@@ -1,8 +1,8 @@
 use server::PREDICTION_REPORT_HTML;
 use anyhow::{Context, Result, anyhow};
 use csv::Writer;
-use image::{DynamicImage, imageops::FilterType};
-use ndarray::{Array2, Array3, Array4, ArrayView2, Axis, CowArray, Ix2, IxDyn};
+use image::{imageops::FilterType};
+use ndarray::{Array3, Array4, ArrayView2, Axis, CowArray, Ix2, IxDyn};
 use ort::{
     LoggingLevel,
     environment::Environment,
@@ -164,10 +164,17 @@ impl EyeballerRunner {
 
             let outputs = self.session.run(vec![input_tensor])?;
             let out = outputs[0].try_extract::<f32>()?;
-            let out2: ArrayView2<f32> = out
-                .view()
+            
+            let out_view = out.view();
+            let out2: ArrayView2<f32> = out_view
+                .clone()
                 .into_dimensionality::<Ix2>()
                 .context("bad output rank")?;
+
+            //let out2: ArrayView2<f32> = out
+              //  .view()
+                //.into_dimensionality::<Ix2>()
+                //.context("bad output rank")?;
 
             let mut logits = vec![0.0_f32; ncls];
             for c in 0..ncls {
