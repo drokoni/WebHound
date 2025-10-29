@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use headless_chrome::{Browser, LaunchOptionsBuilder};
 use std::sync::{Arc, Mutex};
+use portpicker::pick_unused_port;
 
 pub struct BrowserManager {
     inner: Mutex<Option<Arc<Browser>>>,
@@ -14,10 +15,11 @@ impl BrowserManager {
     }
 
     fn launch_browser() -> Result<Arc<Browser>> {
+        let port = pick_unused_port().unwrap_or(0);
         // В 0.9 используем только доступные билдер-методы.
         let mut builder = LaunchOptionsBuilder::default();
         builder.headless(true);
-        builder.port(Some(9222));
+        builder.port(Some(port));
         // Если у твоей сборки есть метод sandbox(false) — можно раскомментировать:
         // builder.sandbox(false);
 
