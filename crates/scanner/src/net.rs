@@ -19,7 +19,7 @@ pub async fn fetch_wayback_urls(client: &Client, domain: &str) -> AnyResult<Stri
 
     let mut alt = Url::parse("https://web.archive.org/cdx/search/cdx")?;
     alt.set_query(Some(&format!(
-        "url=*.{0}/*&matchType=domain&collapse=urlkey&output=txt&fl=original&limit=250",
+        "url={0}/*&matchType=domain&collapse=urlkey&output=txt&fl=original&limit=250",
         host
     )));
     let resp2 = client.get(alt.clone()).header("User-Agent", ua).send().await?;
