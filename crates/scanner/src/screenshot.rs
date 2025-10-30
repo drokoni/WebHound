@@ -1,7 +1,7 @@
 use anyhow::{Result as AnyResult, anyhow};
 use headless_chrome::protocol::page::ScreenshotFormat;
-use std::path::Path;
 use tokio::task;
+use std::{path::Path, thread, time::Duration};
 use core::utils::sanitize_filename;
 
 use crate::browser_manager::BROWSER_MANAGER;
@@ -23,6 +23,8 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
                         .map_err(|e| anyhow!("navigate_to({fixed_url}): {e}"))?
                         .wait_until_navigated()
                         .map_err(|e| anyhow!("wait_until_navigated: {e}"))?;
+                    
+                    thread::sleep(Duration::from_secs(1));
 
                     let png = tab
                         .capture_screenshot(ScreenshotFormat::PNG, None, true)
