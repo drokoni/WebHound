@@ -1,5 +1,6 @@
 ```bash
 sudo apt install chromium
+sudo apt install pkg-config libssl-dev
 ```
 
 ```bash
