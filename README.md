@@ -5,10 +5,8 @@ sudo apt install pkg-config libssl-dev
 
 ```bash
 cat <<'EOF' >> ~/.zshrc
-# --- WebHound ONNX runtime path ---
 export ORT_DYLIB_PATH="PATH/TO/WebHound/LibPy/libonnxruntime.so.1.23.2"
 export LD_LIBRARY_PATH="PATH/TO/WebHound/LibPy:${LD_LIBRARY_PATH}"
-# ----------------------------------
 EOF
 ```
 
