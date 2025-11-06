@@ -88,11 +88,11 @@ pub async fn process_single_url(
                     Err(e) => eprintln!("Не удалось скачать {}: {}", u, e),
                 }
             }
-
-            // 3) Скриншот только «живого» HTML (для wayback тоже можно, но оставим как есть)
-            if let Err(e) = make_screenshot_task(url, paths.screenshots_dir()).await {
-                eprintln!("Ошибка скриншота {}: {}", url, e);
-            }
+        }
+        
+        // Скриншот
+        if let Err(e) = make_screenshot_task(url, paths.screenshots_dir()).await {
+            eprintln!("Ошибка скриншота {}: {}", url, e);
         }
     } else {
         eprintln!("Не получилось получить ни live, ни wayback: {}", url);
@@ -101,7 +101,7 @@ pub async fn process_single_url(
     Ok(())
 }
 
-// --- Вспомогательные для process_single_url ---
+// Вспомогательные
 
 pub trait PathsLike: Send + Sync {
     fn screenshots_dir(&self) -> &Path;
@@ -244,8 +244,7 @@ fn sanitize_basename(s: &str) -> String {
     out
 }
 
-// -------- Энтропия / анализ секретов --------
-
+// Энтропия
 pub fn shannon_entropy(s: &str) -> (f64, f64, usize) {
     use std::collections::HashMap;
 

@@ -1,98 +1,241 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Eyeballer ONNX Report</title>
-    <style>
-      body {
-        font-family:
-          system-ui,
-          Segoe UI,
-          Roboto,
-          Helvetica,
-          Arial,
-          sans-serif;
-        margin: 24px;
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Eyeballer ONNX Report</title>
+  <style>
+    body {
+      font-family:
+        system-ui,
+        Segoe UI,
+        Roboto,
+        Helvetica,
+        Arial,
+        sans-serif;
+      margin: 24px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f5f5f5;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    th.sort-asc::after {
+      content: " ▲";
+      font-size: 11px;
+    }
+
+    th.sort-desc::after {
+      content: " ▼";
+      font-size: 11px;
+    }
+
+    img.thumb {
+      height: 110px;
+    }
+
+    .prob {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .controls {
+      margin-bottom: 16px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .controls label {
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Eyeballer ONNX Report</h1>
+  <p>
+    Images dir: <code>{IMAGES_DIR}</code> · CSV:
+    <a href="./{CSV_NAME}">{CSV_NAME}</a>
+  </p>
+
+  <div class="controls">
+    <label>
+      Фильтр по классу:
+      <select id="labelFilter">
+        <option value="">(все)</option>
+      </select>
+    </label>
+    <span id="countInfo"></span>
+  </div>
+
+  <table id="reportTable">
+    <thead>
+      <tr>
+        <th data-col="image" data-sortable="false">Image</th>
+        <th data-col="top_label" data-sortable="true">Top label</th>
+        <th data-col="top_prob" data-sortable="true">Top prob</th>
+        <th data-col="all_probs" data-sortable="false">All probs</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script>
+    // всё состояние держим в памяти
+    const STATE = {
+      rows: [], // все строки из CSV
+      filtered: [], // отфильтрованные по селекту
+      sort: {col: null, dir: "asc"}, // текущая сортировка
+    };
+
+    async function main() {
+      const csvName = "{CSV_NAME}";
+      const text = await fetch(csvName).then((r) => r.text());
+      const lines = text.trim().split(/\r?\n/);
+      const head = lines.shift().split(",");
+      const idx = Object.fromEntries(head.map((h, i) => [h, i]));
+
+      const labelSet = new Set();
+      const allRows = [];
+
+      for (const line of lines) {
+        const cols = line.split(",");
+        const file = cols[idx["file"]];
+        const topLabel = cols[idx["top_label"]];
+        const topProb = Number(cols[idx["top_prob"]]) || 0;
+
+        labelSet.add(topLabel);
+
+        const probsHtml = head
+          .filter((h) => h.startsWith("p_"))
+          .map((h) => `${h}=${Number(cols[idx[h]]).toFixed(4)}`)
+          .join("<br>");
+
+        allRows.push({
+          file,
+          top_label: topLabel,
+          top_prob: topProb,
+          probs_html: probsHtml,
+        });
       }
 
-      table {
-        border-collapse: collapse;
-        width: 100%;
-      }
+      STATE.rows = allRows;
 
-      th,
-      td {
-        border: 1px solid #ddd;
-        padding: 8px;
-        font-size: 14px;
-      }
+      // заполним селект
+      const labelFilter = document.getElementById("labelFilter");
+      [...labelSet].sort().forEach((lbl) => {
+        const opt = document.createElement("option");
+        opt.value = lbl;
+        opt.textContent = lbl;
+        labelFilter.appendChild(opt);
+      });
 
-      th {
-        background: #f5f5f5;
-      }
+      labelFilter.addEventListener("change", () => {
+        applyFilterAndRender();
+      });
 
-      img.thumb {
-        height: 110px;
-      }
+      // повесим сортировку на заголовки
+      const thead = document.querySelector("#reportTable thead");
+      thead.addEventListener("click", (ev) => {
+        const th = ev.target.closest("th");
+        if (!th) return;
+        const col = th.dataset.col;
+        const sortable = th.dataset.sortable === "true";
+        if (!sortable) return;
 
-      .prob {
-        font-variant-numeric: tabular-nums;
-      }
-    </style>
-  </head>
-
-  <body>
-    <h1>Eyeballer ONNX Report</h1>
-    <p>
-      Images dir: <code>{IMAGES_DIR}</code> · CSV:
-      <a href="./{CSV_NAME}">{CSV_NAME}</a>
-    </p>
-    <table>
-      <thead>
-        <tr>
-          <th>Image</th>
-          <th>Top label</th>
-          <th>Top prob</th>
-          <th>All probs</th>
-        </tr>
-      </thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <script>
-      async function main() {
-        const csvName = "{CSV_NAME}";
-        const text = await fetch(csvName).then((r) => r.text());
-        const lines = text.trim().split(/\r?\n/);
-        const head = lines.shift().split(",");
-        const idx = Object.fromEntries(head.map((h, i) => [h, i]));
-        const rows = document.getElementById("rows");
-
-        for (const line of lines) {
-          const cols = line.split(",");
-          const file = cols[idx["file"]]; // из CSV, например: images/foo.png
-          const top = cols[idx["top_label"]];
-          const prob = Number(cols[idx["top_prob"]]).toFixed(4);
-
-          const probs = head
-            .filter((h) => h.startsWith("p_"))
-            .map((h) => `${h}=${Number(cols[idx[h]]).toFixed(4)}`)
-            .join("<br>");
-
-          // не кодируем: берём как есть; для надёжности добавляем './'
-          const src = file.startsWith("./") ? file : `./${file}`;
-
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-        <td><img class="thumb" src="${src}"
-                 onerror="this.replaceWith(document.createTextNode(file))"></td>
-        <td>${top}</td>
-        <td class="prob">${prob}</td>
-        <td class="prob">${probs}</td>`;
-          rows.appendChild(tr);
+        // если щёлкнули по той же колонке — меняем направление
+        if (STATE.sort.col === col) {
+          STATE.sort.dir = STATE.sort.dir === "asc" ? "desc" : "asc";
+        } else {
+          STATE.sort.col = col;
+          STATE.sort.dir = "asc";
         }
+
+        applyFilterAndRender();
+      });
+
+      applyFilterAndRender();
+    }
+
+    function applyFilterAndRender() {
+      const selected = document.getElementById("labelFilter").value;
+      let data = STATE.rows;
+      if (selected) {
+        data = data.filter((r) => r.top_label === selected);
       }
-      main();
-    </script>
-  </body>
+      // сортировка
+      if (STATE.sort.col) {
+        const {col, dir} = STATE.sort;
+        data = [...data].sort((a, b) => {
+          let av = a[col];
+          let bv = b[col];
+          // prob — число, top_label — строка
+          if (col === "top_prob") {
+            av = Number(av);
+            bv = Number(bv);
+            return dir === "asc" ? av - bv : bv - av;
+          } else {
+            // строковая сортировка
+            return dir === "asc"
+              ? String(av).localeCompare(String(bv))
+              : String(bv).localeCompare(String(av));
+          }
+        });
+      }
+
+      STATE.filtered = data;
+      renderTable();
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById("rows");
+      tbody.innerHTML = "";
+
+      for (const row of STATE.filtered) {
+        const src = row.file.startsWith("./") ? row.file : `./${row.file}`;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td><img class="thumb" src="${src}" onerror="this.replaceWith(document.createTextNode('${row.file}'))"></td>
+            <td>${row.top_label}</td>
+            <td class="prob">${row.top_prob.toFixed(4)}</td>
+            <td class="prob">${row.probs_html}</td>
+          `;
+        tbody.appendChild(tr);
+      }
+
+      const countInfo = document.getElementById("countInfo");
+      countInfo.textContent = `Показано ${STATE.filtered.length} из ${STATE.rows.length}`;
+
+      // обновим классы у th
+      const ths = document.querySelectorAll("#reportTable thead th");
+      ths.forEach((th) => {
+        th.classList.remove("sort-asc", "sort-desc");
+        const col = th.dataset.col;
+        if (col && col === STATE.sort.col) {
+          th.classList.add(
+            STATE.sort.dir === "asc" ? "sort-asc" : "sort-desc",
+          );
+        }
+      });
+    }
+
+    main();
+  </script>
+</body>
+
 </html>
