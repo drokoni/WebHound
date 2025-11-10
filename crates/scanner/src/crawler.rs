@@ -24,10 +24,8 @@ const TEXT_EXTS: &[&str] = &[
     "env", "yaml", "yml", "log", "bak", "old", "sql",
 ];
 
-const INTERESTING_NAMES: &[&str] = &["robots.txt", "sitemap.xml"];
-
 const ARCHIVE_EXTS: &[&str] = &["zip", "tar", "tgz", "gz", "bz2", "xz"];
-
+const INTERESTING_NAMES: &[&str] = &["robots.txt", "sitemap.xml"];
 
 pub async fn process_single_url(
     client: &Client,
@@ -39,91 +37,149 @@ pub async fn process_single_url(
         return Ok(());
     }
 
+
     let (body, final_url, _from_wayback) = match fetch_live_or_wayback(client, url).await {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("Ошибка загрузки {url}: {e}");
-            return Ok(());
+            eprintln!("[!] Ошибка загрузки {url}: {e}");
+            return Ok(());     
         }
     };
 
-    let main_ext = detect_ext(&final_url).unwrap_or_else(|| "bin".to_string());
-    let main_path = asset_path_for(&final_url, &main_ext, paths);
-    save_bytes(&main_path, &body)?;
-    analyze_bytes_with_rules(&body, &final_url, info_file).await?;
+    handle_response_for_url(client, &final_url, body, paths, info_file).await;
 
-    if ARCHIVE_EXTS.contains(&main_ext.as_str()) {
-        analyze_archive_file(&main_path, &final_url, paths, info_file).await?;
+    Ok(())
+}
+
+async fn handle_response_for_url(
+    client: &Client,
+    final_url: &str,
+    body: Vec<u8>,
+    paths: &impl PathsLike,
+    info_file: &Arc<Mutex<File>>,
+) {
+    let ext = detect_ext(final_url).unwrap_or_else(|| "bin".to_string());
+
+    if let Err(e) = save_bytes_safe(&asset_path_for(final_url, &ext, paths), &body) {
+        eprintln!("[!] Ошибка сохранения {final_url}: {e}");
     }
 
-    if is_html_ext(&main_ext) {
-        if let Ok(text) = std::str::from_utf8(&body) {
-            let mut to_visit = extract_links(text, &final_url);
+    if let Err(e) = analyze_bytes_with_rules(&body, final_url, info_file).await {
+        eprintln!("[!] Ошибка анализа содержимого {final_url}: {e}");
+    }
 
-            if let Some(root) = root_of(&final_url) {
-                for name in INTERESTING_NAMES {
-                    to_visit.insert(format!("{}/{}", root.trim_end_matches('/'), name));
-                }
-            }
-
-            let mut seen = HashSet::new();
-
-            for u in to_visit.into_iter() {
-                if !seen.insert(u.clone()) {
-                    continue;
-                }
-                if should_ignore_path(&u) {
-                    continue;
-                }
-
-                if let Ok((data, used_u, _)) = fetch_live_or_wayback(client, &u).await {
-                    let ext = detect_ext(&used_u).unwrap_or_else(|| "bin".to_string());
-                    let path = asset_path_for(&used_u, &ext, paths);
-                    save_bytes(&path, &data)?;
-                    analyze_bytes_with_rules(&data, &used_u, info_file).await?;
-
-                    if ARCHIVE_EXTS.contains(&ext.as_str()) {
-                        analyze_archive_file(&path, &used_u, paths, info_file).await?;
-                    }
-
-                    spawn_screenshot(&used_u, paths);
-                }
-            }
+    if ARCHIVE_EXTS.contains(&ext.as_str()) {
+        if let Err(e) = analyze_archive_file(
+            &asset_path_for(final_url, &ext, paths),
+            final_url,
+            paths,
+            info_file,
+        )
+        .await
+        {
+            eprintln!("[!] Ошибка анализа архива {final_url}: {e}");
         }
     }
 
-    spawn_screenshot(&final_url, paths);
+    if is_html_ext(&ext) {
+        if let Ok(text) = std::str::from_utf8(&body) {
+            handle_html_links(client, final_url, text, paths, info_file).await;
+        }
+    }
 
-    Ok(())
+    spawn_screenshot(final_url, paths);
+}
+
+async fn handle_html_links(
+    client: &Client,
+    base_url: &str,
+    html: &str,
+    paths: &impl PathsLike,
+    info_file: &Arc<Mutex<File>>,
+) {
+    let mut urls = extract_links(html, base_url);
+
+    if let Some(root) = root_of(base_url) {
+        for name in INTERESTING_NAMES {
+            urls.insert(format!("{}/{}", root.trim_end_matches('/'), name));
+        }
+    }
+
+    let mut seen = HashSet::new();
+
+    for u in urls.into_iter() {
+        if !seen.insert(u.clone()) {
+            continue;
+        }
+        if should_ignore_path(&u) {
+            continue;
+        }
+
+        match fetch_live_or_wayback(client, &u).await {
+            Ok((data, real_u, _)) => {
+                let ext = detect_ext(&real_u).unwrap_or_else(|| "bin".to_string());
+                let path = asset_path_for(&real_u, &ext, paths);
+
+                if let Err(e) = save_bytes_safe(&path, &data) {
+                    eprintln!("[!] Ошибка сохранения {real_u}: {e}");
+                }
+
+                if let Err(e) = analyze_bytes_with_rules(&data, &real_u, info_file).await {
+                    eprintln!("[!] Ошибка анализа содержимого {real_u}: {e}");
+                }
+
+                if ARCHIVE_EXTS.contains(&ext.as_str()) {
+                    if let Err(e) =
+                        analyze_archive_file(&path, &real_u, paths, info_file).await
+                    {
+                        eprintln!("[!] Ошибка анализа архива {real_u}: {e}");
+                    }
+                }
+
+                spawn_screenshot(&real_u, paths);
+            }
+            Err(e) => {
+                eprintln!("[!] Ошибка загрузки ресурса {u}: {e}");
+            }
+        }
+    }
 }
 
 
 
 fn spawn_screenshot(url: &str, paths: &impl PathsLike) {
     let url = url.to_string();
-    let screenshots_dir = paths.screenshots_dir().to_path_buf();
+    let dir = paths.screenshots_dir().to_path_buf();
 
     task::spawn(async move {
-        if let Err(e) = make_screenshot_task(&url, &screenshots_dir).await {
-            eprintln!("Ошибка скриншота {url}: {e}");
+        if let Err(e) = make_screenshot_task(&url, &dir).await {
+            eprintln!("[!] Ошибка скриншота {url}: {e}");
         }
     });
 }
 
 
+fn save_bytes_safe(path: &Path, data: &[u8]) -> AnyResult<()> {
+    if let Some(parent) = path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            return Err(e.into());
+        }
+    }
+    save_bytes(path, data)
+}
+
+
 
 fn detect_ext(u: &str) -> Option<String> {
-    Url::parse(u)
-        .ok()
-        .and_then(|url| {
-            let path = url.path();
-            let name = path.rsplit('/').next().unwrap_or("");
-            if let Some((_, ext)) = name.rsplit_once('.') {
-                Some(ext.to_ascii_lowercase())
-            } else {
-                None
-            }
-        })
+    Url::parse(u).ok().and_then(|url| {
+        let path = url.path();
+        let name = path.rsplit('/').next().unwrap_or("");
+        if let Some((_, ext)) = name.rsplit_once('.') {
+            Some(ext.to_ascii_lowercase())
+        } else {
+            None
+        }
+    })
 }
 
 fn is_html_ext(ext: &str) -> bool {
@@ -136,7 +192,6 @@ fn is_html_ext(ext: &str) -> bool {
 fn asset_path_for(url: &str, ext: &str, paths: &impl PathsLike) -> PathBuf {
     let safe = sanitize_filename(url);
 
-    // JS как и раньше — отдельная директория
     if ext == "js" {
         return paths.jsscripts_dir().join(format!("{safe}.js"));
     }
@@ -157,7 +212,7 @@ fn root_of(url: &str) -> Option<String> {
     let u = Url::parse(url).ok()?;
     let scheme = u.scheme();
     let host = u.host_str()?;
-    Ok(format!("{scheme}://{host}"))
+    Some(format!("{scheme}://{host}"))
 }
 
 
@@ -191,22 +246,22 @@ fn extract_links(html: &str, base_url: &str) -> HashSet<String> {
 }
 
 fn normalize_url(base: &Url, raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
+    let s = raw.trim();
+    if s.is_empty() {
         return None;
     }
-    if trimmed.starts_with('#')
-        || trimmed.starts_with("mailto:")
-        || trimmed.starts_with("javascript:")
-        || trimmed.starts_with("data:")
+    if s.starts_with('#')
+        || s.starts_with("mailto:")
+        || s.starts_with("javascript:")
+        || s.starts_with("data:")
     {
         return None;
     }
 
-    let u = if let Ok(abs) = Url::parse(trimmed) {
+    let u = if let Ok(abs) = Url::parse(s) {
         abs
-    } else if let Ok(joined) = base.join(trimmed) {
-        joined
+    } else if let Ok(j) = base.join(s) {
+        j
     } else {
         return None;
     };
@@ -230,7 +285,7 @@ async fn analyze_bytes_with_rules(
         Err(_) => return Ok(()),
     };
 
-    let hits = scan_patterns(text, url);
+    let hits = scan_patterns(text);
 
     if hits.is_empty() {
         return Ok(());
@@ -238,16 +293,15 @@ async fn analyze_bytes_with_rules(
 
     use std::io::Write;
     let mut f = info_file.lock().await;
-
     writeln!(f, "{url}")?;
-    for (k, v) in hits {
-        let (h, total_bits, len) = shannon_entropy(v.as_bytes());
+    for (rule_name, value) in hits {
+        let (h, total_bits, len) = shannon_entropy(value.as_bytes());
         let h_r = (h * 100.0).round() / 100.0;
         let total_r = (total_bits * 100.0).round() / 100.0;
         writeln!(
             f,
             "  - [{}] Найдено: {} | len={} | H≈{} bits/char | total≈{} bits",
-            k, v, len, h_r, total_r
+            rule_name, value, len, h_r, total_r
         )?;
     }
 
@@ -274,30 +328,25 @@ fn is_probably_text(data: &[u8]) -> bool {
     weird * 10 < sample_len
 }
 
-fn scan_patterns(text: &str, url: &str) -> Vec<(String, String)> {
-    let mut result = Vec::new();
+fn scan_patterns(text: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
 
     for spec in PATTERNS.iter() {
-        for m in spec.re.captures_iter(text) {
-            let m0 = match m.get(0) {
+        for cap in spec.re.captures_iter(text) {
+            let m = match cap.get(0) {
                 Some(v) => v.as_str(),
                 None => continue,
             };
 
-            if should_ignore_value(m0) {
+            if should_ignore_value(m) {
                 continue;
             }
 
-            let key = spec.name.clone();
-            result.push((key, m0.to_string()));
+            out.push((spec.name.clone(), m.to_string()));
         }
     }
 
-    if result.is_empty() {
-        let _ = url;
-    }
-
-    result
+    out
 }
 
 fn shannon_entropy(bytes: &[u8]) -> (f64, f64, usize) {
@@ -311,10 +360,10 @@ fn shannon_entropy(bytes: &[u8]) -> (f64, f64, usize) {
     }
 
     let n = bytes.len() as f64;
-    let mut h = 0.0f64;
+    let mut h = 0.0;
 
     for &count in freq.values() {
-        let p = (count as f64) / n;
+        let p = count as f64 / n;
         h -= p * p.log2();
     }
 
@@ -334,7 +383,7 @@ async fn analyze_archive_file(
     let base_url = base_url.to_string();
     let assets_root = paths.assets_dir().to_path_buf();
 
-    let extracted_hits = task::spawn_blocking(move || -> AnyResult<Vec<(String, String)>> {
+    let hits = task::spawn_blocking(move || -> AnyResult<Vec<(String, String)>> {
         let ext = archive_path
             .extension()
             .and_then(|s| s.to_str())
@@ -345,7 +394,7 @@ async fn analyze_archive_file(
 
         match ext.as_str() {
             "zip" => analyze_zip(&archive_path, &base_url, &assets_root, &mut all_hits)?,
-            "tar" | "tgz" | "gz" | "bz2" | "xz" => {
+            "tar" | "gz" | "tgz" | "bz2" | "xz" => {
                 analyze_tar_like(&archive_path, &base_url, &assets_root, &ext, &mut all_hits)?
             }
             _ => {}
@@ -355,21 +404,22 @@ async fn analyze_archive_file(
     })
     .await??;
 
-    if !extracted_hits.is_empty() {
-        use std::io::Write;
-        let mut f = info_file.lock().await;
+    if hits.is_empty() {
+        return Ok(());
+    }
 
-        writeln!(f, "{base_url} (архив)")?;
-        for (k, v) in extracted_hits {
-            let (h, total_bits, len) = shannon_entropy(v.as_bytes());
-            let h_r = (h * 100.0).round() / 100.0;
-            let total_r = (total_bits * 100.0).round() / 100.0;
-            writeln!(
-                f,
-                "  - [{}] Найдено: {} | len={} | H≈{} bits/char | total≈{} bits",
-                k, v, len, h_r, total_r
-            )?;
-        }
+    use std::io::Write;
+    let mut f = info_file.lock().await;
+    writeln!(f, "{base_url} (архив)")?;
+    for (rule_name, value) in hits {
+        let (h, total_bits, len) = shannon_entropy(value.as_bytes());
+        let h_r = (h * 100.0).round() / 100.0;
+        let total_r = (total_bits * 100.0).round() / 100.0;
+        writeln!(
+            f,
+            "  - [{}] Найдено: {} | len={} | H≈{} bits/char | total≈{} bits",
+            rule_name, value, len, h_r, total_r
+        )?;
     }
 
     Ok(())
@@ -385,13 +435,18 @@ fn analyze_zip(
     let mut zip = zip::ZipArchive::new(file)?;
 
     for i in 0..zip.len() {
-        let mut entry = zip.by_index(i)?;
+        let mut entry = match zip.by_index(i) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
         if !entry.is_file() {
             continue;
         }
 
         let mut data = Vec::new();
-        entry.read_to_end(&mut data)?;
+        if entry.read_to_end(&mut data).is_err() {
+            continue;
+        }
 
         let name = entry.name().to_string();
         let ext = name
@@ -402,11 +457,11 @@ fn analyze_zip(
 
         let virt_url = format!("{base_url}!{name}");
         let save_path = build_asset_path_from_parts(&virt_url, &ext, assets_root);
-        save_bytes(&save_path, &data)?;
+        let _ = save_bytes_safe(&save_path, &data);
 
         if is_probably_text(&data) {
             if let Ok(text) = std::str::from_utf8(&data) {
-                let hits = scan_patterns(text, &virt_url);
+                let hits = scan_patterns(text);
                 all_hits.extend(hits);
             }
         }
@@ -439,7 +494,10 @@ fn analyze_tar_like(
     let mut ar = Archive::new(reader);
 
     for entry in ar.entries()? {
-        let mut entry = entry?;
+        let mut entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
         if !entry.header().entry_type().is_file() {
             continue;
         }
@@ -457,15 +515,17 @@ fn analyze_tar_like(
             .to_ascii_lowercase();
 
         let mut data = Vec::new();
-        entry.read_to_end(&mut data)?;
+        if entry.read_to_end(&mut data).is_err() {
+            continue;
+        }
 
         let virt_url = format!("{base_url}!{name}");
         let save_path = build_asset_path_from_parts(&virt_url, &ext, assets_root);
-        save_bytes(&save_path, &data)?;
+        let _ = save_bytes_safe(&save_path, &data);
 
         if is_probably_text(&data) {
             if let Ok(text) = std::str::from_utf8(&data) {
-                let hits = scan_patterns(text, &virt_url);
+                let hits = scan_patterns(text);
                 all_hits.extend(hits);
             }
         }
@@ -481,7 +541,6 @@ fn build_asset_path_from_parts(url: &str, ext: &str, assets_root: &Path) -> Path
     } else {
         "bin"
     };
-
     assets_root.join(subdir).join(format!("{safe}.{ext}"))
 }
 
