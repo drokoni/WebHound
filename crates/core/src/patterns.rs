@@ -65,20 +65,15 @@ const RULS_TOML: &str = config::RULS_TOML;
 
 fn compile_with_bigger_limits(pat: &str) -> Result<Regex, regex::Error> {
     RegexBuilder::new(pat)
-        // подними лимиты, чтобы влезали большие объединения
         .size_limit(64 * 1024 * 1024) // 64 MiB на таблицы
         .dfa_size_limit(64 * 1024 * 1024) // 64 MiB на DFA
         .build()
 }
 
-/// если огромный паттерн не компилится, но есть keywords — строим лёгкую “окрестностную” регекспу:
-/// (?i)(kw1|kw2|...)\W{0,20}[:=]?\W{0,20}(['"]?)([A-Za-z0-9_\-]{20,})(\2)?
-/// секрет берём из группы 3
 fn build_lightweight_regex_from_keywords(keywords: &[String]) -> Option<(Regex, usize)> {
     if keywords.is_empty() {
         return None;
     }
-    // экранируем ключевые слова для безопасного включения в regex-альтернативы
     let alts: String = keywords
         .iter()
         .filter(|s| !s.trim().is_empty())
@@ -90,20 +85,16 @@ fn build_lightweight_regex_from_keywords(keywords: &[String]) -> Option<(Regex, 
         return None;
     }
 
-    // ищем “ключевое слово … значение”
     let pat = format!(
         r#"(?i)\b(?:{})(?:\W{{0,20}}[:=]\W{{0,20}}|\W{{1,20}})?(['\"]?)([A-Za-z0-9_\-]{{20,}})(\1)?"#,
         alts
     );
-    // группировка: 1 — кавычка (если была), 2 — сам секрет, 3 — закрывающая кавычка
-    // отдаём как (Regex, secret_group = 2)
     match compile_with_bigger_limits(&pat) {
         Ok(re) => Some((re, 2)),
         Err(_) => None,
     }
 }
 
-// ====== Глобальный список правил (с компиляцией и фоллбэком) ======
 pub static PATTERNS: Lazy<Vec<PatternSpec>> = Lazy::new(|| {
     let cfg: GitleaksConfig =
         toml::from_str(RULS_TOML).expect("BUG: не удалось распарсить  ../../config/ruls.toml");
@@ -111,7 +102,6 @@ pub static PATTERNS: Lazy<Vec<PatternSpec>> = Lazy::new(|| {
     let mut out: Vec<PatternSpec> = Vec::new();
 
     for r in cfg.rules {
-        // 1) пробуем с поднятыми лимитами
         match compile_with_bigger_limits(&r.regex) {
             Ok(re) => {
                 out.push(PatternSpec {
@@ -121,11 +111,9 @@ pub static PATTERNS: Lazy<Vec<PatternSpec>> = Lazy::new(|| {
                 });
             }
             Err(e) => {
-                // 2) если не влезло — лёгкий фоллбэк по keywords
                 if let Some((re, group_idx)) = build_lightweight_regex_from_keywords(&r.keywords) {
                     eprintln!(
-                        "[gitleaks] правило '{}' слишком большое: {}. \
-                        Использую облегчённый regex на базе keywords (secret_group={}).",
+                        "[gitleaks] правило '{}' слишком большое: {}. Используем облегчённый regex на базе keywords (secret_group={}).",
                         r.description, e, group_idx
                     );
                     out.push(PatternSpec {
@@ -155,7 +143,6 @@ pub static IGNORE_VALUE_REGEXES: Lazy<RegexSet> = Lazy::new(|| {
         r#"^\$([A-Z_]+|[a-z_]+)$"#,
         r#"^\$\{([A-Z_]+|[a-z_]+)\}$"#,
         r#"^\{\{[ \t]*[\w ().|]+[ \t]*\}\}$"#,
-        // ВАЖНО: из-за последовательности "' используем r#"..."#
         r#"^\$\{\{[ \t]*((env|github|secrets|vars)(\.[A-Za-z]\w+)+[\w "'&./=|]*)[ \t]*\}\}$"#,
         r#"^%([A-Z_]+|[a-z_]+)%$"#,
         r#"^%[+\-# 0]?[bcdeEfFgGoOpqstTUvxX]$"#,
@@ -194,7 +181,6 @@ pub static IGNORE_PATH_REGEXES: Lazy<RegexSet> = Lazy::new(|| {
     ]).expect("BUG: неверный regex в IGNORE_PATH_REGEXES")
 });
 
-// -------- Вспомогательные --------
 pub fn normalize_value(s: &str) -> Cow<'_, str> {
     let t = s.trim();
     if (t.starts_with('"') && t.ends_with('"'))

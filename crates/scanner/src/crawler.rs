@@ -18,7 +18,7 @@ const INTERESTING_EXTS: &[&str] = &[
     "bak", "old", "sql",
 ];
 
-// спец-файлы по имени
+// спецфайлы по имени
 const INTERESTING_NAMES: &[&str] = &["robots.txt", "sitemap.xml"];
 
 pub async fn process_single_url(
@@ -27,7 +27,6 @@ pub async fn process_single_url(
     paths: &impl PathsLike,
     info_file: &Arc<Mutex<File>>,
 ) -> AnyResult<()> {
-    // 1) попробуем получить сам ресурс (live → wayback)
     if let Ok((bytes, used_url, _is_wayback)) = fetch_live_or_wayback(client, url).await {
         // определим «тип» грубо по расширению / content sniffing по URL
         let is_html = url_looks_html(url);
@@ -46,18 +45,15 @@ pub async fn process_single_url(
             analyze_info(&text, url, info_file).await?;
         }
 
-        // 2) если это HTML — парсим и вытягиваем «интересные» ссылки
         if is_html {
             let body = String::from_utf8_lossy(&bytes).to_string();
             let mut to_fetch = extract_interesting_links(&body, url);
-            // добавим robots / sitemap для корня
             if let Some(root) = root_of(url) {
                 for name in INTERESTING_NAMES {
                     to_fetch.insert(format!("{}/{}", root.trim_end_matches('/'), name));
                 }
             }
 
-            // скачиваем с дедупом и фильтрами
             let mut seen = HashSet::new();
             for u in to_fetch.into_iter() {
                 if !seen.insert(u.clone()) {
@@ -101,7 +97,6 @@ pub async fn process_single_url(
     Ok(())
 }
 
-// Вспомогательные
 
 pub trait PathsLike: Send + Sync {
     fn screenshots_dir(&self) -> &Path;
@@ -116,7 +111,6 @@ fn url_looks_html(u: &str) -> bool {
             "html" | "htm" | "shtml" | "php" | "asp" | "aspx" | "jsp"
         );
     }
-    // без расширения — считаем HTML
     true
 }
 
@@ -129,7 +123,6 @@ fn guess_ext_from_url(u: &str) -> Option<&'static str> {
         .and_then(|name| {
             if let Some((_, ext)) = name.rsplit_once('.') {
                 let e = ext.to_ascii_lowercase();
-                // нормализуем известные
                 match e.as_str() {
                     "js" => Some("js"),
                     "php" => Some("php"),
@@ -184,7 +177,6 @@ fn extract_interesting_links(body_html: &str, base_url: &str) -> HashSet<String>
             }
         }
     }
-    // a[href], link[href]
     for el in doc.find(
         select::predicate::Or(
             select::predicate::Name("a"),
@@ -222,7 +214,6 @@ pub fn join_url(base: &str, href: &str) -> Option<String> {
 }
 
 fn make_script_filename(full_url: &str) -> String {
-    // короткое, читаемое имя для js
     let mut hasher = Sha256::new();
     hasher.update(full_url.as_bytes());
     let hex = format!("{:x}", hasher.finalize());
@@ -244,7 +235,6 @@ fn sanitize_basename(s: &str) -> String {
     out
 }
 
-// Энтропия
 pub fn shannon_entropy(s: &str) -> (f64, f64, usize) {
     use std::collections::HashMap;
 

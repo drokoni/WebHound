@@ -18,9 +18,6 @@ use std::{
 use tokio::sync::Mutex;
 use core::utils::{extract_subdomains, read_urls};
 
-// =====================================================================
-// 4) Paths + адаптер под crawler::PathsLike
-// =====================================================================
 #[derive(Clone)]
 pub struct Paths {
     pub base: PathBuf,
@@ -61,37 +58,29 @@ impl PathsLike for Paths {
     fn assets_dir(&self)      -> &Path { &self.assets_dir }
 }
 
-// =====================================================================
-// 5) Скан как библиотечная функция
-// =====================================================================
 pub async fn run_scan(domain: &str) -> Result<Paths, Box<dyn std::error::Error>> {
     let paths = Paths::new(domain)?;
     let client = Client::new();
 
-    // 1) Wayback URLs
     let body = fetch_wayback_urls(&client, domain).await?;
     fs::write(&paths.out_txt, &body)?;
 
-    // 2) Поддомены
     let subdomains = extract_subdomains(&paths.out_txt).await?;
     if !subdomains.is_empty() {
         fs::write(&paths.subdomains_txt, subdomains.join("\n"))?;
     }
 
-    // 3) Чувствительная информация
     let info_file = Arc::new(Mutex::new(File::create(&paths.sensitive_info_txt)?));
 
-    // 4) URL’ы — читаем, чистим, дедуп
     let mut urls = read_urls(&paths.out_txt).await?;
     urls.retain(|u| !u.trim().is_empty());
     //let urls: Vec<String> = urls.into_iter().collect::<HashSet<_>>().into_iter().collect();
     let urls: Vec<String> = urls
         .into_iter()
-        .collect::<HashSet<String>>()   // <- явно HashSet<String>
+        .collect::<HashSet<String>>()   
         .into_iter()
         .collect();
     
-    // 5) Параллельная обработка
     let concurrency = 4usize;
     stream::iter(urls.into_iter().map(|url| {
         let client = client.clone();

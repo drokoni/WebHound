@@ -6,7 +6,6 @@ use core::utils::sanitize_filename;
 
 use crate::browser_manager::BROWSER_MANAGER;
 
-/// Сделать PNG-скриншот страницы
 pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResult<()> {
     let fixed_url = url.to_string();
     let fixed_for_name = fixed_url.clone();
@@ -50,7 +49,6 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
     .await
     .map_err(|e| anyhow!("JoinError: {e}"))??;
 
-    // сохраняем PNG
     let name = sanitize_filename(&fixed_for_name);
     std::fs::create_dir_all(screenshots_dir)
         .map_err(|e| anyhow!("Создание папки {:?}: {e}", screenshots_dir))?;

@@ -4,7 +4,6 @@ use std::{
     path::{Path},
 };
 
-/// Простой HTTP-сервер на tiny_http для отдачи сгенерированных отчётов
 pub fn server(out_dir: &Path, port: u16) -> Result<()> {
     use tiny_http::{Header, Response, Server};
 
