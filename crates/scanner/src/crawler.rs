@@ -1,7 +1,6 @@
 use core::patterns::{PATTERNS, should_ignore_path, should_ignore_value};
 use core::utils::{sanitize_filename, save_bytes};
-
-use crate::analysis::PathsLike;
+use core::analysis::PathsLike;
 use crate::net::fetch_live_or_wayback;
 use crate::screenshot::make_screenshot_task;
 
@@ -325,7 +324,7 @@ fn is_probably_text(data: &[u8]) -> bool {
         }
     }
 
-    weird * 10 < sample_len
+    weird * 20 < sample_len
 }
 
 fn scan_patterns(text: &str) -> Vec<(String, String)> {
@@ -379,9 +378,12 @@ async fn analyze_archive_file(
     paths: &impl PathsLike,
     info_file: &Arc<Mutex<File>>,
 ) -> AnyResult<()> {
+
     let archive_path = archive_path.to_path_buf();
-    let base_url = base_url.to_string();
     let assets_root = paths.assets_dir().to_path_buf();
+
+    let base_for_spawn = base_url.to_string();
+    let base_for_log = base_url.to_string();
 
     let hits = task::spawn_blocking(move || -> AnyResult<Vec<(String, String)>> {
         let ext = archive_path
@@ -393,9 +395,9 @@ async fn analyze_archive_file(
         let mut all_hits = Vec::new();
 
         match ext.as_str() {
-            "zip" => analyze_zip(&archive_path, &base_url, &assets_root, &mut all_hits)?,
+            "zip" => analyze_zip(&archive_path, &base_for_spawn, &assets_root, &mut all_hits)?,
             "tar" | "gz" | "tgz" | "bz2" | "xz" => {
-                analyze_tar_like(&archive_path, &base_url, &assets_root, &ext, &mut all_hits)?
+                analyze_tar_like(&archive_path, &base_for_spawn, &assets_root, &ext, &mut all_hits)?
             }
             _ => {}
         }
@@ -410,7 +412,7 @@ async fn analyze_archive_file(
 
     use std::io::Write;
     let mut f = info_file.lock().await;
-    writeln!(f, "{base_url} (архив)")?;
+    writeln!(f, "{base_for_log} (архив)")?;
     for (rule_name, value) in hits {
         let (h, total_bits, len) = shannon_entropy(value.as_bytes());
         let h_r = (h * 100.0).round() / 100.0;

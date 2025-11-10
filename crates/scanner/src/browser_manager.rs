@@ -16,12 +16,9 @@ impl BrowserManager {
 
     fn launch_browser() -> Result<Arc<Browser>> {
         let port = pick_unused_port().unwrap_or(0);
-        // В 0.9 используем только доступные билдер-методы.
         let mut builder = LaunchOptionsBuilder::default();
         builder.headless(true);
         builder.port(Some(port));
-        // Если у твоей сборки есть метод sandbox(false) — можно раскомментировать:
-        // builder.sandbox(false);
 
         let launch_opts = builder
             .build()
@@ -32,7 +29,6 @@ impl BrowserManager {
         Ok(Arc::new(browser))
     }
 
-    /// Вернёт живой экземпляр браузера; если прежний умер — поднимет новый.
     pub fn get(&self) -> Result<Arc<Browser>> {
         // пробуем взять из кэша
         match self.inner.lock() {
@@ -44,7 +40,6 @@ impl BrowserManager {
             Err(e) => return Err(anyhow!("mutex poisoned in BrowserManager::get(read): {e}")),
         }
 
-        // запускаем новый и кладём в кэш
         let fresh = Self::launch_browser()?;
         let mut guard = self
             .inner
@@ -54,7 +49,6 @@ impl BrowserManager {
         Ok(fresh)
     }
 
-    /// Сбрасывает кэш; при следующем get() запустится новый Chrome.
     pub fn invalidate(&self) -> Result<()> {
         let mut guard = self
             .inner

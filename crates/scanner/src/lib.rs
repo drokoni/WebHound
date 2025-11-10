@@ -3,7 +3,8 @@ pub mod crawler;
 pub mod net;
 pub mod screenshot;
 
-pub use crawler::{PathsLike, process_single_url};
+use core::PathsLike;
+pub use crawler::process_single_url;
 pub use net::{fetch_live_or_wayback, fetch_wayback_urls};
 pub use screenshot::make_screenshot_task;
 use anyhow::Result;
