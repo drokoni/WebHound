@@ -1,14 +1,14 @@
-use server::PREDICTION_REPORT_HTML;
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use csv::Writer;
-use image::{imageops::FilterType};
+use image::imageops::FilterType;
 use ndarray::{Array3, Array4, ArrayView2, Axis, CowArray, Ix2, IxDyn};
 use ort::{
-    LoggingLevel,
     environment::Environment,
     session::{Session, SessionBuilder},
     value::Value,
+    LoggingLevel,
 };
+use server::PREDICTION_REPORT_HTML;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -158,7 +158,7 @@ impl EyeballerRunner {
             //let chw: Array3<f32> = hwc.permuted_axes([2, 0, 1]).to_owned();
             //let input_1chw: Array4<f32> = chw.insert_axis(Axis(0));
             //let input_dyn = input_1chw.into_dyn();
-            
+
             // стало: NHWC -> (1, H, W, C)
             let nhwc: Array4<f32> = hwc.insert_axis(Axis(0));
             let input_dyn = nhwc.into_dyn();
@@ -168,7 +168,7 @@ impl EyeballerRunner {
 
             let outputs = self.session.run(vec![input_tensor])?;
             let out = outputs[0].try_extract::<f32>()?;
-            
+
             let out_view = out.view();
             let out2: ArrayView2<f32> = out_view
                 .clone()
@@ -176,9 +176,9 @@ impl EyeballerRunner {
                 .context("bad output rank")?;
 
             //let out2: ArrayView2<f32> = out
-              //  .view()
-                //.into_dimensionality::<Ix2>()
-                //.context("bad output rank")?;
+            //  .view()
+            //.into_dimensionality::<Ix2>()
+            //.context("bad output rank")?;
 
             let mut logits = vec![0.0_f32; ncls];
             for c in 0..ncls {

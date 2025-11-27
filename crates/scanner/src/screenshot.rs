@@ -12,38 +12,91 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
 
     let data = task::spawn_blocking(move || -> AnyResult<Vec<u8>> {
         for attempt in 1..=2 {
-            let browser = BROWSER_MANAGER
-                .get()
-                .map_err(|e| anyhow!("Запуск Chrome: {e}"))?;
+            let browser = match BROWSER_MANAGER.get() {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!(
+                        "Ошибка получения браузера (попытка {attempt}) для {fixed_url}: {e}"
+                    );
+                    if attempt == 2 {
+                        return Err(e);
+                    }
+                    continue;
+                }
+            };
 
-            match browser.new_tab() {
-                Ok(tab) => {
-                    tab.navigate_to(&fixed_url)
-                        .map_err(|e| anyhow!("navigate_to({fixed_url}): {e}"))?
-                        .wait_until_navigated()
-                        .map_err(|e| anyhow!("wait_until_navigated: {e}"))?;
-                    
-                    thread::sleep(Duration::from_secs(1));
+            let tab = match browser.new_tab() {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!(
+                        "Не удалось создать вкладку (попытка {attempt}) для {fixed_url}: {e}"
+                    );
+                    let _ = BROWSER_MANAGER.invalidate();
+                    if attempt == 2 {
+                        return Err(anyhow!(
+                            "Не удалось создать вкладку для {fixed_url}: {e}"
+                        ));
+                    }
+                    continue;
+                }
+            };
 
-                    let png = tab
-                        .capture_screenshot(ScreenshotFormat::PNG, None, true)
-                        .map_err(|e| anyhow!("capture_screenshot: {e}"))?;
-                    return Ok(png);
+            if let Err(e) = tab.navigate_to(&fixed_url) {
+                eprintln!(
+                    "Навигация на {fixed_url} (попытка {attempt}) завершилась ошибкой: {e}"
+                );
+                let _ = BROWSER_MANAGER.invalidate();
+                if attempt == 2 {
+                    return Err(anyhow!("Навигация на {fixed_url} провалилась: {e}"));
+                }
+                continue;
+            }
+
+            let nav_res = tab.wait_until_navigated();
+            match nav_res {
+                Ok(_) => {
+                    thread::sleep(Duration::from_secs(2));
                 }
                 Err(e) => {
                     let msg = e.to_string();
-                    if msg.contains("connection is closed") || msg.contains("WebSocket") {
-                        if attempt == 1 {
-                            let _ = BROWSER_MANAGER.invalidate();
-                            continue;
+                    if msg.contains("The event waited for never came") {
+                        eprintln!(
+                            "wait_until_navigated не дождался события для {fixed_url} \
+                             (попытка {attempt}): {msg} — продолжаем по таймеру"
+                        );
+                        thread::sleep(Duration::from_secs(8));
+                    } else {
+                        eprintln!(
+                            "Ошибка в wait_until_navigated для {fixed_url} (попытка {attempt}): {msg}"
+                        );
+                        let _ = BROWSER_MANAGER.invalidate();
+                        if attempt == 2 {
+                            return Err(anyhow!(
+                                "Навигация к {fixed_url} провалилась (wait_until_navigated): {msg}"
+                            ));
                         }
+                        continue;
                     }
-                    return Err(anyhow!("Не удалось создать вкладку: {msg}"));
+                }
+            }
+
+            match tab.capture_screenshot(ScreenshotFormat::PNG, None, true) {
+                Ok(bytes) => return Ok(bytes),
+                Err(e) => {
+                    eprintln!(
+                        "Ошибка скриншота {fixed_url} (попытка {attempt}): {e}"
+                    );
+                    let _ = BROWSER_MANAGER.invalidate();
+                    if attempt == 2 {
+                        return Err(anyhow!("Скриншот для {fixed_url} провалился: {e}"));
+                    }
+                    continue;
                 }
             }
         }
+
         Err(anyhow!(
-            "Не удалось создать вкладку после повторной попытки"
+            "Не удалось создать скриншот для {fixed_url} после нескольких попыток"
         ))
     })
     .await
@@ -53,6 +106,10 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
     std::fs::create_dir_all(screenshots_dir)
         .map_err(|e| anyhow!("Создание папки {:?}: {e}", screenshots_dir))?;
     let path = screenshots_dir.join(format!("{name}.png"));
-    std::fs::write(&path, &data).map_err(|e| anyhow!("Запись файла {:?}: {e}", path))?;
+    std::fs::write(&path, &data)
+        .map_err(|e| anyhow!("Запись файла {:?}: {e}", path))?;
+
     Ok(())
 }
+
+
