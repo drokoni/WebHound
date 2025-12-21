@@ -3,13 +3,14 @@ pub mod crawler;
 pub mod net;
 pub mod screenshot;
 
+use anyhow::Result;
+use core::utils::{extract_subdomains, read_urls};
 use core::PathsLike;
 pub use crawler::process_single_url;
-pub use net::{fetch_live_or_wayback, fetch_wayback_urls};
-pub use screenshot::make_screenshot_task;
-use anyhow::Result;
 use futures::{stream, StreamExt};
+pub use net::{fetch_live_or_wayback, fetch_wayback_urls};
 use reqwest::Client;
+pub use screenshot::make_screenshot_task;
 use std::{
     collections::HashSet,
     fs::{self, File},
@@ -17,7 +18,6 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::Mutex;
-use core::utils::{extract_subdomains, read_urls};
 
 #[derive(Clone)]
 pub struct Paths {
@@ -54,18 +54,42 @@ impl Paths {
 }
 
 impl PathsLike for Paths {
-    fn screenshots_dir(&self) -> &Path { &self.screenshots_dir }
-    fn jsscripts_dir(&self)   -> &Path { &self.jsscripts_dir }
-    fn assets_dir(&self)      -> &Path { &self.assets_dir }
+    fn screenshots_dir(&self) -> &Path {
+        &self.screenshots_dir
+    }
+    fn jsscripts_dir(&self) -> &Path {
+        &self.jsscripts_dir
+    }
+    fn assets_dir(&self) -> &Path {
+        &self.assets_dir
+    }
 }
 
 pub async fn run_scan(domain: &str) -> Result<Paths, Box<dyn std::error::Error>> {
     let paths = Paths::new(domain)?;
     let client = Client::new();
 
-    let body = fetch_wayback_urls(&client, domain).await?;
-    fs::write(&paths.out_txt, &body)?;
+    // 1) Пытаемся Wayback как раньше
+    let body = fetch_wayback_urls(&client, domain)
+        .await
+        .unwrap_or_else(|_| String::new());
 
+    // 2) Если Wayback пуст — значит цель может быть локальная / IP:port / просто один URL
+    if body.trim().is_empty() {
+        // Запишем out.txt так, чтобы остальной пайплайн не ломался
+        // Если передали полный URL — используем его; если домен/host — добавим http://
+        let single = if domain.starts_with("http://") || domain.starts_with("https://") {
+            domain.to_string()
+        } else {
+            format!("http://{}", domain)
+        };
+
+        fs::write(&paths.out_txt, format!("{}\n", single))?;
+    } else {
+        fs::write(&paths.out_txt, &body)?;
+    }
+
+    // дальше — твой код без изменений
     let subdomains = extract_subdomains(&paths.out_txt).await?;
     if !subdomains.is_empty() {
         fs::write(&paths.subdomains_txt, subdomains.join("\n"))?;
@@ -75,13 +99,13 @@ pub async fn run_scan(domain: &str) -> Result<Paths, Box<dyn std::error::Error>>
 
     let mut urls = read_urls(&paths.out_txt).await?;
     urls.retain(|u| !u.trim().is_empty());
-    //let urls: Vec<String> = urls.into_iter().collect::<HashSet<_>>().into_iter().collect();
+
     let urls: Vec<String> = urls
         .into_iter()
-        .collect::<HashSet<String>>()   
+        .collect::<HashSet<String>>()
         .into_iter()
         .collect();
-    
+
     let concurrency = 4usize;
     stream::iter(urls.into_iter().map(|url| {
         let client = client.clone();

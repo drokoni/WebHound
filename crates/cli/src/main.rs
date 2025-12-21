@@ -1,9 +1,9 @@
-use anyhow::{Result, anyhow};
-use clap::{ArgAction, CommandFactory, Parser, Subcommand};
-use std::{fs, path::PathBuf};
 use analyzer::vision::*;
-use server::server;
+use anyhow::{anyhow, Result};
+use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 use scanner::run_scan;
+use server::server;
+use std::{fs, path::PathBuf};
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
@@ -30,8 +30,11 @@ struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,
 
-    /// Домен для скана (если НЕ указан --images и НЕ задана подкоманда)
-    #[arg(value_name = "DOMAIN")]
+    /// Цель для скана: домен (example.com) или URL (http://127.0.0.1:8080/...)
+    #[arg(value_name = "TARGET")]
+    target: Option<String>,
+
+    #[arg(value_name = "TARGET")]
     domain: Option<String>,
 
     /// Папка с изображениями. Если указана — скан НЕ выполняется.
@@ -63,6 +66,20 @@ struct Cli {
     port: u16,
 }
 
+fn base_dir_name(target: &str) -> String {
+    // Если это URL — берём host[:port], иначе оставляем как есть (домен/host)
+    if let Ok(u) = url::Url::parse(target) {
+        let host = u.host_str().unwrap_or("site");
+        if let Some(port) = u.port() {
+            return format!("{}_{}", host, port); // ':' в имени папки не нужен
+        }
+        return host.to_string();
+    }
+
+    // target без схемы: example.com или 127.0.0.1:8080
+    target.replace(':', "_")
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut args = Cli::parse();
@@ -82,7 +99,7 @@ async fn main() -> Result<()> {
     // допускаются два пути:
     //   1) --images DIR (тогда domain не обязателен)
     //   2) DOMAIN (тогда --images не нужен)
-    if args.images.is_none() && args.domain.is_none() {
+    if args.images.is_none() && args.target.is_none() {
         let mut cmd = Cli::command();
         cmd.print_help().ok();
         eprintln!("\n\nОшибка: укажи DOMAIN или --images DIR (или используй подкоманду `serv`).");
@@ -115,9 +132,9 @@ async fn main() -> Result<()> {
     }
 
     // --- Режим 2: полный цикл — скан → (опц.) анализ ---
-    let domain = args.domain.as_deref().unwrap(); // к этому месту гарантированно Some
+    let target = args.target.as_deref().unwrap(); // к этому месту гарантированно Some
 
-    let paths = run_scan(domain).await.map_err(|e| anyhow!(e.to_string()))?;
+    let paths = run_scan(target).await.map_err(|e| anyhow!(e.to_string()))?;
     println!("Скан завершён. Результаты: {}", paths.base.display());
 
     if args.analyze {
@@ -125,7 +142,7 @@ async fn main() -> Result<()> {
         let out_dir = args
             .report
             .clone()
-            .unwrap_or_else(|| PathBuf::from(domain).join("report"));
+            .unwrap_or_else(|| PathBuf::from(target).join("report"));
 
         fs::create_dir_all(&out_dir)
             .map_err(|e| anyhow!("Не создать {}: {e}", out_dir.display()))?;
