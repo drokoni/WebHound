@@ -83,6 +83,13 @@ fn detect_chrome_binary() -> Option<PathBuf> {
 
     #[cfg(target_os = "linux")]
     const CANDIDATES: &[&str] = &[
+            // ABS paths first (most reliable)
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium",
         "google-chrome-stable",
         "google-chrome",
         "chromium",
