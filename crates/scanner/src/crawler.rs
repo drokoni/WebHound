@@ -1,8 +1,8 @@
-use core::patterns::{PATTERNS, should_ignore_path, should_ignore_value};
-use core::utils::{sanitize_filename, save_bytes};
-use core::analysis::PathsLike;
 use crate::net::fetch_live_or_wayback;
 use crate::screenshot::make_screenshot_task;
+use core::analysis::PathsLike;
+use core::patterns::{should_ignore_path, should_ignore_value, PATTERNS};
+use core::utils::{sanitize_filename, save_bytes};
 
 use anyhow::Result as AnyResult;
 use reqwest::Client;
@@ -17,10 +17,10 @@ use std::{
 use tokio::{sync::Mutex, task};
 use url::Url;
 
+/// Текстовые расширения (то, что имеет смысл гонять через PATTERNS/regex).
 const TEXT_EXTS: &[&str] = &[
-    "html", "htm", "shtml", "xhtml", "php", "asp", "aspx", "jsp",
-    "txt", "js", "json", "xml", "csv", "ini", "conf", "config",
-    "env", "yaml", "yml", "log", "bak", "old", "sql",
+    "html", "htm", "shtml", "xhtml", "php", "asp", "aspx", "jsp", "txt", "js", "json", "xml",
+    "csv", "ini", "conf", "config", "env", "yaml", "yml", "log", "bak", "old", "sql", "css",
 ];
 
 const ARCHIVE_EXTS: &[&str] = &["zip", "tar", "tgz", "gz", "bz2", "xz"];
@@ -36,17 +36,15 @@ pub async fn process_single_url(
         return Ok(());
     }
 
-
     let (body, final_url, _from_wayback) = match fetch_live_or_wayback(client, url).await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("[!] Ошибка загрузки {url}: {e}");
-            return Ok(());     
+            return Ok(());
         }
     };
 
     handle_response_for_url(client, &final_url, body, paths, info_file).await;
-
     Ok(())
 }
 
@@ -57,35 +55,45 @@ async fn handle_response_for_url(
     paths: &impl PathsLike,
     info_file: &Arc<Mutex<File>>,
 ) {
-    let ext = detect_ext(final_url).unwrap_or_else(|| "bin".to_string());
+    // ext:
+    // - если URL содержит ext — используем
+    // - если ext нет, но это HTML — считаем html
+    // - иначе bin
+    let ext = detect_ext(final_url)
+        .or_else(|| {
+            if looks_like_html(&body) {
+                Some("html".to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "bin".to_string());
 
-    if let Err(e) = save_bytes_safe(&asset_path_for(final_url, &ext, paths), &body) {
+    // сохраняем в assets/<ext>/... (папка под каждое расширение)
+    let save_path = asset_path_for(final_url, &ext, paths);
+    if let Err(e) = save_bytes_safe(&save_path, &body) {
         eprintln!("[!] Ошибка сохранения {final_url}: {e}");
     }
 
-    if let Err(e) = analyze_bytes_with_rules(&body, final_url, info_file).await {
+    // анализ по правилам (текст + lossy decode)
+    if let Err(e) = analyze_bytes_with_rules(&body, final_url, &ext, info_file).await {
         eprintln!("[!] Ошибка анализа содержимого {final_url}: {e}");
     }
 
+    // анализ архивов
     if ARCHIVE_EXTS.contains(&ext.as_str()) {
-        if let Err(e) = analyze_archive_file(
-            &asset_path_for(final_url, &ext, paths),
-            final_url,
-            paths,
-            info_file,
-        )
-        .await
-        {
+        if let Err(e) = analyze_archive_file(&save_path, final_url, paths, info_file).await {
             eprintln!("[!] Ошибка анализа архива {final_url}: {e}");
         }
     }
 
-    if is_html_ext(&ext) {
-        if let Ok(text) = std::str::from_utf8(&body) {
-            handle_html_links(client, final_url, text, paths, info_file).await;
-        }
+    // HTML: парсим и извлекаем ссылки, даже если ext странный, но sniff говорит HTML
+    if is_html_ext(&ext) || looks_like_html(&body) {
+        let text = String::from_utf8_lossy(&body);
+        handle_html_links(client, final_url, &text, paths, info_file).await;
     }
 
+    // скриншот
     spawn_screenshot(final_url, paths);
 }
 
@@ -98,6 +106,7 @@ async fn handle_html_links(
 ) {
     let mut urls = extract_links(html, base_url);
 
+    // добавляем robots/sitemap для корня (с портом)
     if let Some(root) = root_of(base_url) {
         for name in INTERESTING_NAMES {
             urls.insert(format!("{}/{}", root.trim_end_matches('/'), name));
@@ -116,21 +125,28 @@ async fn handle_html_links(
 
         match fetch_live_or_wayback(client, &u).await {
             Ok((data, real_u, _)) => {
-                let ext = detect_ext(&real_u).unwrap_or_else(|| "bin".to_string());
+                let ext = detect_ext(&real_u)
+                    .or_else(|| {
+                        if looks_like_html(&data) {
+                            Some("html".to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| "bin".to_string());
+
                 let path = asset_path_for(&real_u, &ext, paths);
 
                 if let Err(e) = save_bytes_safe(&path, &data) {
                     eprintln!("[!] Ошибка сохранения {real_u}: {e}");
                 }
 
-                if let Err(e) = analyze_bytes_with_rules(&data, &real_u, info_file).await {
+                if let Err(e) = analyze_bytes_with_rules(&data, &real_u, &ext, info_file).await {
                     eprintln!("[!] Ошибка анализа содержимого {real_u}: {e}");
                 }
 
                 if ARCHIVE_EXTS.contains(&ext.as_str()) {
-                    if let Err(e) =
-                        analyze_archive_file(&path, &real_u, paths, info_file).await
-                    {
+                    if let Err(e) = analyze_archive_file(&path, &real_u, paths, info_file).await {
                         eprintln!("[!] Ошибка анализа архива {real_u}: {e}");
                     }
                 }
@@ -144,8 +160,6 @@ async fn handle_html_links(
     }
 }
 
-
-
 fn spawn_screenshot(url: &str, paths: &impl PathsLike) {
     let url = url.to_string();
     let dir = paths.screenshots_dir().to_path_buf();
@@ -157,7 +171,6 @@ fn spawn_screenshot(url: &str, paths: &impl PathsLike) {
     });
 }
 
-
 fn save_bytes_safe(path: &Path, data: &[u8]) -> AnyResult<()> {
     if let Some(parent) = path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
@@ -167,8 +180,7 @@ fn save_bytes_safe(path: &Path, data: &[u8]) -> AnyResult<()> {
     save_bytes(path, data)
 }
 
-
-
+/// Берём ext только из path (без query) через url::Url
 fn detect_ext(u: &str) -> Option<String> {
     Url::parse(u).ok().and_then(|url| {
         let path = url.path();
@@ -188,33 +200,39 @@ fn is_html_ext(ext: &str) -> bool {
     )
 }
 
-fn asset_path_for(url: &str, ext: &str, paths: &impl PathsLike) -> PathBuf {
-    let safe = sanitize_filename(url);
-
-    if ext == "js" {
-        return paths.jsscripts_dir().join(format!("{safe}.js"));
+/// sniff: если начало похоже на HTML — считаем HTML даже без расширения
+fn looks_like_html(body: &[u8]) -> bool {
+    if body.is_empty() {
+        return false;
     }
+    let n = body.len().min(2048);
+    let s = String::from_utf8_lossy(&body[..n]).to_ascii_lowercase();
 
-    let subdir = if TEXT_EXTS.contains(&ext) || ARCHIVE_EXTS.contains(&ext) {
-        ext
-    } else {
-        "bin"
-    };
-
-    paths
-        .assets_dir()
-        .join(subdir)
-        .join(format!("{safe}.{ext}"))
+    s.contains("<!doctype html")
+        || s.contains("<html")
+        || s.contains("<head")
+        || s.contains("<body")
 }
 
+/// Папка под каждое расширение: assets/<ext>/... (bin для неизвестного)
+fn asset_path_for(url: &str, ext: &str, paths: &impl PathsLike) -> PathBuf {
+    let safe = sanitize_filename(url);
+    let dir = ext.to_ascii_lowercase();
+    paths.assets_dir().join(dir).join(format!("{safe}.{ext}"))
+}
+
+/// root с учётом порта (важно для IP:PORT)
 fn root_of(url: &str) -> Option<String> {
     let u = Url::parse(url).ok()?;
     let scheme = u.scheme();
     let host = u.host_str()?;
-    Some(format!("{scheme}://{host}"))
+    let port = u.port();
+
+    Some(match port {
+        Some(p) => format!("{scheme}://{host}:{p}"),
+        None => format!("{scheme}://{host}"),
+    })
 }
-
-
 
 fn extract_links(html: &str, base_url: &str) -> HashSet<String> {
     let base = match Url::parse(base_url) {
@@ -268,24 +286,31 @@ fn normalize_url(base: &Url, raw: &str) -> Option<String> {
     Some(u.to_string())
 }
 
-
-
+/// КЛЮЧЕВОЙ ФИКС ПО ТВОИМ ПРАВИЛАМ:
+/// Большинство regex из ruls.toml кладёт секрет в CAPTURE GROUP #1.
+/// Раньше ты брал cap.get(0) (весь матч), из-за этого часто ничего полезного не писалось.
 async fn analyze_bytes_with_rules(
     bytes: &[u8],
     url: &str,
+    ext: &str,
     info_file: &Arc<Mutex<File>>,
 ) -> AnyResult<()> {
-    if !is_probably_text(bytes) {
+    // Анализируем как текст если:
+    // - расширение в TEXT_EXTS
+    // - или похоже на HTML
+    // - или "в целом текст" по эвристике
+    let ext_lc = ext.to_ascii_lowercase();
+    let should_try_text =
+        TEXT_EXTS.contains(&ext_lc.as_str()) || looks_like_html(bytes) || is_probably_text(bytes);
+
+    if !should_try_text {
         return Ok(());
     }
 
-    let text = match std::str::from_utf8(bytes) {
-        Ok(t) => t,
-        Err(_) => return Ok(()),
-    };
+    // Мягкий decode: не падаем на не-UTF8
+    let text = String::from_utf8_lossy(bytes);
 
-    let hits = scan_patterns(text);
-
+    let hits = scan_patterns(&text);
     if hits.is_empty() {
         return Ok(());
     }
@@ -332,10 +357,16 @@ fn scan_patterns(text: &str) -> Vec<(String, String)> {
 
     for spec in PATTERNS.iter() {
         for cap in spec.re.captures_iter(text) {
-            let m = match cap.get(0) {
-                Some(v) => v.as_str(),
-                None => continue,
-            };
+            // FIX: берем capture group #1, если есть, иначе #0
+            let m = cap
+                .get(1)
+                .or_else(|| cap.get(0))
+                .map(|v| v.as_str())
+                .unwrap_or("");
+
+            if m.is_empty() {
+                continue;
+            }
 
             if should_ignore_value(m) {
                 continue;
@@ -370,15 +401,12 @@ fn shannon_entropy(bytes: &[u8]) -> (f64, f64, usize) {
     (h, total_bits, bytes.len())
 }
 
-
-
 async fn analyze_archive_file(
     archive_path: &Path,
     base_url: &str,
     paths: &impl PathsLike,
     info_file: &Arc<Mutex<File>>,
 ) -> AnyResult<()> {
-
     let archive_path = archive_path.to_path_buf();
     let assets_root = paths.assets_dir().to_path_buf();
 
@@ -396,9 +424,13 @@ async fn analyze_archive_file(
 
         match ext.as_str() {
             "zip" => analyze_zip(&archive_path, &base_for_spawn, &assets_root, &mut all_hits)?,
-            "tar" | "gz" | "tgz" | "bz2" | "xz" => {
-                analyze_tar_like(&archive_path, &base_for_spawn, &assets_root, &ext, &mut all_hits)?
-            }
+            "tar" | "gz" | "tgz" | "bz2" | "xz" => analyze_tar_like(
+                &archive_path,
+                &base_for_spawn,
+                &assets_root,
+                &ext,
+                &mut all_hits,
+            )?,
             _ => {}
         }
 
@@ -462,10 +494,9 @@ fn analyze_zip(
         let _ = save_bytes_safe(&save_path, &data);
 
         if is_probably_text(&data) {
-            if let Ok(text) = std::str::from_utf8(&data) {
-                let hits = scan_patterns(text);
-                all_hits.extend(hits);
-            }
+            let text = String::from_utf8_lossy(&data);
+            let hits = scan_patterns(&text);
+            all_hits.extend(hits);
         }
     }
 
@@ -526,23 +557,18 @@ fn analyze_tar_like(
         let _ = save_bytes_safe(&save_path, &data);
 
         if is_probably_text(&data) {
-            if let Ok(text) = std::str::from_utf8(&data) {
-                let hits = scan_patterns(text);
-                all_hits.extend(hits);
-            }
+            let text = String::from_utf8_lossy(&data);
+            let hits = scan_patterns(&text);
+            all_hits.extend(hits);
         }
     }
 
     Ok(())
 }
 
-fn build_asset_path_from_parts(url: &str, ext: &str, assets_root: &Path) -> PathBuf {
-    let safe = sanitize_filename(url);
-    let subdir = if TEXT_EXTS.contains(&ext) || ARCHIVE_EXTS.contains(&ext) {
-        ext
-    } else {
-        "bin"
-    };
-    assets_root.join(subdir).join(format!("{safe}.{ext}"))
+/// Для файлов внутри архива: тоже кладём в assets/<ext>/...
+fn build_asset_path_from_parts(virt_url: &str, ext: &str, assets_root: &Path) -> PathBuf {
+    let safe = sanitize_filename(virt_url);
+    let dir = ext.to_ascii_lowercase();
+    assets_root.join(dir).join(format!("{safe}.{ext}"))
 }
-

@@ -34,9 +34,6 @@ struct Cli {
     #[arg(value_name = "TARGET")]
     target: Option<String>,
 
-    #[arg(value_name = "TARGET")]
-    domain: Option<String>,
-
     /// Папка с изображениями. Если указана — скан НЕ выполняется.
     #[arg(long, value_name = "DIR")]
     images: Option<PathBuf>,
@@ -64,6 +61,17 @@ struct Cli {
     /// Порт сервера (для основного режима)
     #[arg(long, value_name = "PORT", default_value_t = 8000)]
     port: u16,
+
+    /// Пост-анализ папки assets (или любой папки с файлами) по правилам PATTERNS.
+    /// В этом режиме сеть/скан НЕ запускается.
+    #[arg(long, value_name = "DIR")]
+    assets: Option<PathBuf>,
+
+    /// Куда писать результаты пост-анализа assets.
+    /// По умолчанию: если DIR заканчивается на ".../assets" -> "../sensitive_info.post.txt",
+    /// иначе -> "DIR/sensitive_info.post.txt"
+    #[arg(long, value_name = "FILE")]
+    assets_out: Option<PathBuf>,
 }
 
 fn base_dir_name(target: &str) -> String {
@@ -94,15 +102,34 @@ async fn main() -> Result<()> {
         server::server(&dir, port)?;
         return Ok(());
     }
+    if let Some(assets_dir) = args.assets.clone() {
+        let out_file = args.assets_out.clone().unwrap_or_else(|| {
+            if assets_dir.file_name().and_then(|s| s.to_str()) == Some("assets") {
+                assets_dir
+                    .parent()
+                    .unwrap_or(&assets_dir)
+                    .join("sensitive_info.post.txt")
+            } else {
+                assets_dir.join("sensitive_info.post.txt")
+            }
+        });
+
+        scanner::postfilter::postfilter_assets_dir_to_file(&assets_dir, &out_file).await?;
+
+        println!("Assets postfilter done.");
+        println!("Assets dir: {}", assets_dir.display());
+        println!("Output: {}", out_file.display());
+        return Ok(());
+    }
 
     // --- Валидация для основного режима ---
     // допускаются два пути:
-    //   1) --images DIR (тогда domain не обязателен)
-    //   2) DOMAIN (тогда --images не нужен)
+    //   1) --images DIR (тогда target не обязателен)
+    //   2) TARGET (тогда --images не нужен)
     if args.images.is_none() && args.target.is_none() {
         let mut cmd = Cli::command();
         cmd.print_help().ok();
-        eprintln!("\n\nОшибка: укажи DOMAIN или --images DIR (или используй подкоманду `serv`).");
+        eprintln!("\n\nОшибка: укажи TARGET или --images DIR (или используй подкоманду `serv`).");
         return Ok(());
     }
 
@@ -133,8 +160,10 @@ async fn main() -> Result<()> {
 
     // --- Режим 2: полный цикл — скан → (опц.) анализ ---
     let target = args.target.as_deref().unwrap(); // к этому месту гарантированно Some
+    let base = base_dir_name(target);
 
     let paths = run_scan(target).await.map_err(|e| anyhow!(e.to_string()))?;
+
     println!("Скан завершён. Результаты: {}", paths.base.display());
 
     if args.analyze {
@@ -142,7 +171,7 @@ async fn main() -> Result<()> {
         let out_dir = args
             .report
             .clone()
-            .unwrap_or_else(|| PathBuf::from(target).join("report"));
+            .unwrap_or_else(|| PathBuf::from(base_dir_name(target)).join("report"));
 
         fs::create_dir_all(&out_dir)
             .map_err(|e| anyhow!("Не создать {}: {e}", out_dir.display()))?;

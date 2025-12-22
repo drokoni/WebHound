@@ -1,6 +1,7 @@
 pub mod browser_manager;
 pub mod crawler;
 pub mod net;
+pub mod postfilter;
 pub mod screenshot;
 
 use anyhow::Result;
@@ -69,32 +70,15 @@ pub async fn run_scan(domain: &str) -> Result<Paths, Box<dyn std::error::Error>>
     let paths = Paths::new(domain)?;
     let client = Client::new();
 
-    // 1) Пытаемся Wayback как раньше
-    let body = fetch_wayback_urls(&client, domain)
-        .await
-        .unwrap_or_else(|_| String::new());
+    let body = fetch_wayback_urls(&client, domain).await?;
+    fs::write(&paths.out_txt, &body)?;
 
-    // 2) Если Wayback пуст — значит цель может быть локальная / IP:port / просто один URL
-    if body.trim().is_empty() {
-        // Запишем out.txt так, чтобы остальной пайплайн не ломался
-        // Если передали полный URL — используем его; если домен/host — добавим http://
-        let single = if domain.starts_with("http://") || domain.starts_with("https://") {
-            domain.to_string()
-        } else {
-            format!("http://{}", domain)
-        };
-
-        fs::write(&paths.out_txt, format!("{}\n", single))?;
-    } else {
-        fs::write(&paths.out_txt, &body)?;
-    }
-
-    // дальше — твой код без изменений
     let subdomains = extract_subdomains(&paths.out_txt).await?;
     if !subdomains.is_empty() {
         fs::write(&paths.subdomains_txt, subdomains.join("\n"))?;
     }
 
+    // В этот файл пишут и crawler (на лету), и наш postfilter (после скачивания).
     let info_file = Arc::new(Mutex::new(File::create(&paths.sensitive_info_txt)?));
 
     let mut urls = read_urls(&paths.out_txt).await?;
@@ -121,6 +105,10 @@ pub async fn run_scan(domain: &str) -> Result<Paths, Box<dyn std::error::Error>>
     .buffer_unordered(concurrency)
     .collect::<Vec<_>>()
     .await;
+
+    if let Err(e) = postfilter::postfilter_assets_dir(&paths.assets_dir, &info_file).await {
+        eprintln!("[!] Postfilter assets failed: {e}");
+    }
 
     Ok(paths)
 }
