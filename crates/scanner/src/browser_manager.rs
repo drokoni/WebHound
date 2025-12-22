@@ -18,47 +18,55 @@ impl BrowserManager {
         }
     }
 
+    /// Один Browser на процесс.
+    /// ВАЖНО: build под mutex — убираем параллельные запуски Chrome.
     pub fn get(&self) -> Result<Arc<Browser>> {
-        {
-            let guard = self
-                .inner
-                .lock()
-                .map_err(|e| anyhow!("mutex poisoned in BrowserManager::get: {e}"))?;
-            if let Some(browser) = &*guard {
-                return Ok(browser.clone());
-            }
-        } // guard дропается здесь
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|e| anyhow!("mutex poisoned in BrowserManager::get: {e}"))?;
+
+        if let Some(browser) = &*guard {
+            return Ok(browser.clone());
+        }
 
         let browser = Arc::new(Self::build_browser()?);
-
-        {
-            let mut guard = self
-                .inner
-                .lock()
-                .map_err(|e| anyhow!("mutex poisoned in BrowserManager::get (store): {e}"))?;
-            *guard = Some(browser.clone());
-        } // guard дропается здесь
-
+        *guard = Some(browser.clone());
         Ok(browser)
     }
 
     fn build_browser() -> Result<Browser> {
-        let port = pick_unused_port()
-            .ok_or_else(|| anyhow!("Не удалось выбрать свободный порт для Chrome"))?;
-
         let chrome_path = detect_chrome_binary().ok_or_else(|| {
             anyhow!("Не удалось найти бинарь Chrome/Chromium. Укажи WEBHOUND_CHROME или CHROME_BIN")
         })?;
 
-        let options = LaunchOptionsBuilder::default()
-            .path(Some(chrome_path))
-            .port(Some(port)) 
-            .headless(true)
-            .window_size(Some((1280, 720)))
-            .build()
-            .map_err(|e| anyhow!("Сборка LaunchOptions: {e}"))?;
+        let mut last_err: Option<anyhow::Error> = None;
 
-        Browser::new(options).map_err(|e| anyhow!("Запуск Chrome/Chromium: {e}"))
+        // Несколько попыток из-за возможной гонки с портом
+        for _ in 0..4 {
+            let port = match pick_unused_port() {
+                Some(p) => p,
+                None => {
+                    last_err = Some(anyhow!("Не удалось выбрать свободный порт для Chrome"));
+                    continue;
+                }
+            };
+
+            let options = LaunchOptionsBuilder::default()
+                .path(Some(chrome_path.clone()))
+                .port(Some(port))
+                .headless(true) // всегда headless
+                .window_size(Some((1280, 720)))
+                .build()
+                .map_err(|e| anyhow!("Сборка LaunchOptions: {e}"))?;
+
+            match Browser::new(options) {
+                Ok(b) => return Ok(b),
+                Err(e) => last_err = Some(anyhow!("Запуск Chrome/Chromium: {e}")),
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| anyhow!("Не удалось запустить Chrome/Chromium")))
     }
 
     pub fn invalidate(&self) -> Result<()> {
@@ -83,9 +91,7 @@ fn detect_chrome_binary() -> Option<PathBuf> {
 
     #[cfg(target_os = "linux")]
     const CANDIDATES: &[&str] = &[
-            // ABS paths first (most reliable)
         "/usr/bin/google-chrome-stable",
-        "/usr/bin/google-chrome",
         "/usr/bin/google-chrome",
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
@@ -133,3 +139,4 @@ fn which(prog: &str) -> Option<PathBuf> {
     }
     None
 }
+
