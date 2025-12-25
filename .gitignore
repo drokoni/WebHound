@@ -1,3 +1,5 @@
 /target
 /kuper.ru
 /freeipa.org 
+/temp
+.gitignore

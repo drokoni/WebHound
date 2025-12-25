@@ -11,7 +11,6 @@ static TAB_SEM: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
 fn tab_limit() -> usize {
     let cpus = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
-    // На VPS лучше меньше параллелизма: стабильнее запуск/рендер.
     if cpus <= 1 { 1 } else { 2 }
 }
 
@@ -21,18 +20,17 @@ fn sem() -> Arc<Semaphore> {
 
 fn is_browser_level_error_str(s: &str) -> bool {
     let s = s.to_lowercase();
-    s.contains("websocket url") ||
-    s.contains("disconnected") ||
-    s.contains("target closed") ||
-    s.contains("connection reset") ||
-    s.contains("chrome launched, but didn't give us a websocket url")
+    s.contains("websocket url")
+        || s.contains("disconnected")
+        || s.contains("target closed")
+        || s.contains("connection reset")
+        || s.contains("chrome launched, but didn't give us a websocket url")
 }
 
 pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResult<()> {
     let fixed_url = url.to_string();
     let fixed_for_name = fixed_url.clone();
 
-    // Важно: permit должен быть Send, потому что мы переносим его в spawn_blocking.
     let permit: OwnedSemaphorePermit = sem()
         .acquire_owned()
         .await
@@ -47,9 +45,7 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
                 Err(e) => {
                     eprintln!("Ошибка получения браузера (попытка {attempt}) для {fixed_url}: {e}");
                     let _ = BROWSER_MANAGER.invalidate();
-                    if attempt == 2 {
-                        return Err(e);
-                    }
+                    if attempt == 2 { return Err(e); }
                     continue;
                 }
             };
@@ -57,10 +53,12 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
             let tab = match browser.new_tab() {
                 Ok(t) => t,
                 Err(e) => {
-                    eprintln!("Не удалось создать вкладку (попытка {attempt}) для {fixed_url}: {e}");
+                    let msg = e.to_string();
+                    eprintln!("Не удалось создать вкладку (попытка {attempt}) для {fixed_url}: {msg}");
+                    // new_tab падает обычно из-за DevTools/Browser
                     let _ = BROWSER_MANAGER.invalidate();
                     if attempt == 2 {
-                        return Err(anyhow!("Не удалось создать вкладку для {fixed_url}: {e}"));
+                        return Err(anyhow!("Не удалось создать вкладку для {fixed_url}: {msg}"));
                     }
                     continue;
                 }
@@ -70,6 +68,7 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
                 let msg = e.to_string();
                 eprintln!("Навигация на {fixed_url} (попытка {attempt}) завершилась ошибкой: {msg}");
 
+                // НЕ инвалидируем браузер на обычные ошибки навигации
                 if is_browser_level_error_str(&msg) {
                     let _ = BROWSER_MANAGER.invalidate();
                 }
@@ -117,6 +116,7 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
                     let msg = e.to_string();
                     eprintln!("Ошибка скриншота {fixed_url} (попытка {attempt}): {msg}");
 
+                    // НЕ инвалидируем браузер на обычные ошибки рендера
                     if is_browser_level_error_str(&msg) {
                         let _ = BROWSER_MANAGER.invalidate();
                     }

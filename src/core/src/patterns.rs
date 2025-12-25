@@ -113,7 +113,7 @@ pub static PATTERNS: Lazy<Vec<PatternSpec>> = Lazy::new(|| {
             Err(e) => {
                 if let Some((re, group_idx)) = build_lightweight_regex_from_keywords(&r.keywords) {
                     eprintln!(
-                        "[gitleaks] правило '{}' слишком большое: {}. Используем облегчённый regex на базе keywords (secret_group={}).",
+                        " правило '{}' слишком большое: {}. Используем облегчённый regex на базе keywords (secret_group={}).",
                         r.description, e, group_idx
                     );
                     out.push(PatternSpec {
