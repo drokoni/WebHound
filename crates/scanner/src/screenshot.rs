@@ -1,21 +1,22 @@
 use anyhow::{anyhow, Result as AnyResult};
 use headless_chrome::protocol::page::ScreenshotFormat;
-use tokio::{sync::Semaphore, task};
+use tokio::{sync::{Semaphore, OwnedSemaphorePermit}, task};
 use std::{path::Path, thread, time::Duration};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use core::utils::sanitize_filename;
 use crate::browser_manager::BROWSER_MANAGER;
 
-static TAB_SEM: OnceLock<Semaphore> = OnceLock::new();
+static TAB_SEM: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
 fn tab_limit() -> usize {
     let cpus = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
-    if cpus <= 1 { 4 } else { 10 }
+    // На VPS лучше меньше параллелизма: стабильнее запуск/рендер.
+    if cpus <= 1 { 1 } else { 2 }
 }
 
-fn sem() -> &'static Semaphore {
-    TAB_SEM.get_or_init(|| Semaphore::new(tab_limit()))
+fn sem() -> Arc<Semaphore> {
+    TAB_SEM.get_or_init(|| Arc::new(Semaphore::new(tab_limit()))).clone()
 }
 
 fn is_browser_level_error_str(s: &str) -> bool {
@@ -31,7 +32,11 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
     let fixed_url = url.to_string();
     let fixed_for_name = fixed_url.clone();
 
-    let permit = sem().acquire().await.map_err(|e| anyhow!("Semaphore acquire: {e}"))?;
+    // Важно: permit должен быть Send, потому что мы переносим его в spawn_blocking.
+    let permit: OwnedSemaphorePermit = sem()
+        .acquire_owned()
+        .await
+        .map_err(|e| anyhow!("Semaphore acquire: {e}"))?;
 
     let data = task::spawn_blocking(move || -> AnyResult<Vec<u8>> {
         let _permit = permit;

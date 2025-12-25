@@ -286,19 +286,12 @@ fn normalize_url(base: &Url, raw: &str) -> Option<String> {
     Some(u.to_string())
 }
 
-/// КЛЮЧЕВОЙ ФИКС ПО ТВОИМ ПРАВИЛАМ:
-/// Большинство regex из ruls.toml кладёт секрет в CAPTURE GROUP #1.
-/// Раньше ты брал cap.get(0) (весь матч), из-за этого часто ничего полезного не писалось.
 async fn analyze_bytes_with_rules(
     bytes: &[u8],
     url: &str,
     ext: &str,
     info_file: &Arc<Mutex<File>>,
 ) -> AnyResult<()> {
-    // Анализируем как текст если:
-    // - расширение в TEXT_EXTS
-    // - или похоже на HTML
-    // - или "в целом текст" по эвристике
     let ext_lc = ext.to_ascii_lowercase();
     let should_try_text =
         TEXT_EXTS.contains(&ext_lc.as_str()) || looks_like_html(bytes) || is_probably_text(bytes);
@@ -307,7 +300,6 @@ async fn analyze_bytes_with_rules(
         return Ok(());
     }
 
-    // Мягкий decode: не падаем на не-UTF8
     let text = String::from_utf8_lossy(bytes);
 
     let hits = scan_patterns(&text);
@@ -357,7 +349,6 @@ fn scan_patterns(text: &str) -> Vec<(String, String)> {
 
     for spec in PATTERNS.iter() {
         for cap in spec.re.captures_iter(text) {
-            // FIX: берем capture group #1, если есть, иначе #0
             let m = cap
                 .get(1)
                 .or_else(|| cap.get(0))

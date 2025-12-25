@@ -1,10 +1,12 @@
 use anyhow::{anyhow, Result};
 use headless_chrome::{Browser, LaunchOptionsBuilder};
 use portpicker::pick_unused_port;
+use std::ffi::OsStr;
 use std::sync::{Arc, Mutex};
 use std::{
     env,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 pub struct BrowserManager {
@@ -18,8 +20,6 @@ impl BrowserManager {
         }
     }
 
-    /// Один Browser на процесс.
-    /// ВАЖНО: build под mutex — убираем параллельные запуски Chrome.
     pub fn get(&self) -> Result<Arc<Browser>> {
         let mut guard = self
             .inner
@@ -40,9 +40,28 @@ impl BrowserManager {
             anyhow!("Не удалось найти бинарь Chrome/Chromium. Укажи WEBHOUND_CHROME или CHROME_BIN")
         })?;
 
+        let sandbox = {
+            #[cfg(target_os = "linux")]
+            {
+                unsafe { libc::geteuid() != 0 }
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                true
+            }
+        };
+
+        let extra_args: Vec<&OsStr> = vec![
+            OsStr::new("--disable-gpu"),
+            OsStr::new("--no-first-run"),
+            OsStr::new("--no-default-browser-check"),
+            OsStr::new("--disable-background-networking"),
+            OsStr::new("--disable-extensions"),
+            OsStr::new("--disable-dev-shm-usage"),
+        ];
+
         let mut last_err: Option<anyhow::Error> = None;
 
-        // Несколько попыток из-за возможной гонки с портом
         for _ in 0..4 {
             let port = match pick_unused_port() {
                 Some(p) => p,
@@ -57,6 +76,9 @@ impl BrowserManager {
                 .port(Some(port))
                 .headless(true) // всегда headless
                 .window_size(Some((1280, 720)))
+                .sandbox(sandbox)
+                .idle_browser_timeout(Duration::from_secs(120))
+                .args(extra_args.clone())
                 .build()
                 .map_err(|e| anyhow!("Сборка LaunchOptions: {e}"))?;
 
