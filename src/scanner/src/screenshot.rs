@@ -1,30 +1,43 @@
 use anyhow::{anyhow, Result as AnyResult};
-use headless_chrome::protocol::page::ScreenshotFormat;
-use tokio::{sync::{Semaphore, OwnedSemaphorePermit}, task};
-use std::{path::Path, thread, time::Duration};
+use headless_chrome::protocol::cdp::Page::{
+    CaptureScreenshotFormatOption as ScreenshotFormat, Viewport,
+};
 use std::sync::{Arc, OnceLock};
+use std::{path::Path, thread, time::Duration};
+use tokio::{
+    sync::{OwnedSemaphorePermit, Semaphore},
+    task,
+};
 
-use core::utils::sanitize_filename;
 use crate::browser_manager::BROWSER_MANAGER;
+use core::utils::sanitize_filename;
 
 static TAB_SEM: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
 fn tab_limit() -> usize {
-    let cpus = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
-    if cpus <= 1 { 1 } else { 2 }
+    let cpus = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    if cpus <= 1 {
+        1
+    } else {
+        2
+    }
 }
 
 fn sem() -> Arc<Semaphore> {
-    TAB_SEM.get_or_init(|| Arc::new(Semaphore::new(tab_limit()))).clone()
+    TAB_SEM
+        .get_or_init(|| Arc::new(Semaphore::new(tab_limit())))
+        .clone()
 }
 
 fn is_browser_level_error_str(s: &str) -> bool {
     let s = s.to_lowercase();
     s.contains("websocket url")
+        || s.contains("chrome launched, but didn't give us a websocket url")
         || s.contains("disconnected")
         || s.contains("target closed")
         || s.contains("connection reset")
-        || s.contains("chrome launched, but didn't give us a websocket url")
 }
 
 pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResult<()> {
@@ -55,7 +68,6 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
                 Err(e) => {
                     let msg = e.to_string();
                     eprintln!("Не удалось создать вкладку (попытка {attempt}) для {fixed_url}: {msg}");
-                    // new_tab падает обычно из-за DevTools/Browser
                     let _ = BROWSER_MANAGER.invalidate();
                     if attempt == 2 {
                         return Err(anyhow!("Не удалось создать вкладку для {fixed_url}: {msg}"));
@@ -66,13 +78,10 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
 
             if let Err(e) = tab.navigate_to(&fixed_url) {
                 let msg = e.to_string();
-                eprintln!("Навигация на {fixed_url} (попытка {attempt}) завершилась ошибкой: {msg}");
-
-                // НЕ инвалидируем браузер на обычные ошибки навигации
+                eprintln!("Навигация на {fixed_url} (попытка {attempt}) ошибка: {msg}");
                 if is_browser_level_error_str(&msg) {
                     let _ = BROWSER_MANAGER.invalidate();
                 }
-
                 if attempt == 2 {
                     return Err(anyhow!("Навигация на {fixed_url} провалилась: {msg}"));
                 }
@@ -80,9 +89,7 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
             }
 
             match tab.wait_until_navigated() {
-                Ok(_) => {
-                    thread::sleep(Duration::from_secs(2));
-                }
+                Ok(_) => thread::sleep(Duration::from_secs(2)),
                 Err(e) => {
                     let msg = e.to_string();
                     if msg.contains("The event waited for never came") {
@@ -92,35 +99,29 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
                         );
                         thread::sleep(Duration::from_secs(8));
                     } else {
-                        eprintln!(
-                            "Ошибка в wait_until_navigated для {fixed_url} (попытка {attempt}): {msg}"
-                        );
-
+                        eprintln!("Ошибка wait_until_navigated для {fixed_url} (попытка {attempt}): {msg}");
                         if is_browser_level_error_str(&msg) {
                             let _ = BROWSER_MANAGER.invalidate();
                         }
-
                         if attempt == 2 {
-                            return Err(anyhow!(
-                                "Навигация к {fixed_url} провалилась (wait_until_navigated): {msg}"
-                            ));
+                            return Err(anyhow!("Навигация к {fixed_url} провалилась: {msg}"));
                         }
                         continue;
                     }
                 }
             }
 
-            match tab.capture_screenshot(ScreenshotFormat::PNG, None, true) {
+            // 1.0.20: capture_screenshot(format, quality, viewport, from_surface)
+            let viewport: Option<Viewport> = None;
+
+            match tab.capture_screenshot(ScreenshotFormat::Png, None, viewport, true) {
                 Ok(bytes) => return Ok(bytes),
                 Err(e) => {
                     let msg = e.to_string();
                     eprintln!("Ошибка скриншота {fixed_url} (попытка {attempt}): {msg}");
-
-                    // НЕ инвалидируем браузер на обычные ошибки рендера
                     if is_browser_level_error_str(&msg) {
                         let _ = BROWSER_MANAGER.invalidate();
                     }
-
                     if attempt == 2 {
                         return Err(anyhow!("Скриншот для {fixed_url} провалился: {msg}"));
                     }
@@ -142,4 +143,3 @@ pub async fn make_screenshot_task(url: &str, screenshots_dir: &Path) -> AnyResul
 
     Ok(())
 }
-
