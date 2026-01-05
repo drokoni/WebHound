@@ -1,14 +1,14 @@
 use crate::net::fetch_live_or_wayback;
 use crate::screenshot::make_screenshot_task;
 use core::analysis::PathsLike;
-use core::patterns::{should_ignore_path, should_ignore_value, PATTERNS};
+use core::patterns::{scan_patterns, should_ignore_path, ScanHit};
 use core::utils::{sanitize_filename, save_bytes};
 
 use anyhow::Result as AnyResult;
 use reqwest::Client;
 use select::{document::Document, predicate::Attr};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fs::File,
     io::Read,
     path::{Path, PathBuf},
@@ -310,14 +310,13 @@ async fn analyze_bytes_with_rules(
     use std::io::Write;
     let mut f = info_file.lock().await;
     writeln!(f, "{url}")?;
-    for (rule_name, value) in hits {
-        let (h, total_bits, len) = shannon_entropy(value.as_bytes());
-        let h_r = (h * 100.0).round() / 100.0;
-        let total_r = (total_bits * 100.0).round() / 100.0;
+    for hit in hits {
+        let h_r = (hit.entropy * 100.0).round() / 100.0;
+        let total_r = (hit.total_bits * 100.0).round() / 100.0;
         writeln!(
             f,
             "  - [{}] Найдено: {} | len={} | H≈{} bits/char | total≈{} bits",
-            rule_name, value, len, h_r, total_r
+            hit.rule_name, hit.value, hit.len, h_r, total_r
         )?;
     }
 
@@ -344,54 +343,6 @@ fn is_probably_text(data: &[u8]) -> bool {
     weird * 20 < sample_len
 }
 
-fn scan_patterns(text: &str) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-
-    for spec in PATTERNS.iter() {
-        for cap in spec.re.captures_iter(text) {
-            let m = cap
-                .get(1)
-                .or_else(|| cap.get(0))
-                .map(|v| v.as_str())
-                .unwrap_or("");
-
-            if m.is_empty() {
-                continue;
-            }
-
-            if should_ignore_value(m) {
-                continue;
-            }
-
-            out.push((spec.name.clone(), m.to_string()));
-        }
-    }
-
-    out
-}
-
-fn shannon_entropy(bytes: &[u8]) -> (f64, f64, usize) {
-    if bytes.is_empty() {
-        return (0.0, 0.0, 0);
-    }
-
-    let mut freq: HashMap<u8, usize> = HashMap::new();
-    for &b in bytes {
-        *freq.entry(b).or_insert(0) += 1;
-    }
-
-    let n = bytes.len() as f64;
-    let mut h = 0.0;
-
-    for &count in freq.values() {
-        let p = count as f64 / n;
-        h -= p * p.log2();
-    }
-
-    let total_bits = h * n;
-    (h, total_bits, bytes.len())
-}
-
 async fn analyze_archive_file(
     archive_path: &Path,
     base_url: &str,
@@ -404,7 +355,7 @@ async fn analyze_archive_file(
     let base_for_spawn = base_url.to_string();
     let base_for_log = base_url.to_string();
 
-    let hits = task::spawn_blocking(move || -> AnyResult<Vec<(String, String)>> {
+    let hits = task::spawn_blocking(move || -> AnyResult<Vec<ScanHit>> {
         let ext = archive_path
             .extension()
             .and_then(|s| s.to_str())
@@ -436,14 +387,13 @@ async fn analyze_archive_file(
     use std::io::Write;
     let mut f = info_file.lock().await;
     writeln!(f, "{base_for_log} (архив)")?;
-    for (rule_name, value) in hits {
-        let (h, total_bits, len) = shannon_entropy(value.as_bytes());
-        let h_r = (h * 100.0).round() / 100.0;
-        let total_r = (total_bits * 100.0).round() / 100.0;
+    for hit in hits {
+        let h_r = (hit.entropy * 100.0).round() / 100.0;
+        let total_r = (hit.total_bits * 100.0).round() / 100.0;
         writeln!(
             f,
             "  - [{}] Найдено: {} | len={} | H≈{} bits/char | total≈{} bits",
-            rule_name, value, len, h_r, total_r
+            hit.rule_name, hit.value, hit.len, h_r, total_r
         )?;
     }
 
@@ -454,7 +404,7 @@ fn analyze_zip(
     path: &Path,
     base_url: &str,
     assets_root: &Path,
-    all_hits: &mut Vec<(String, String)>,
+    all_hits: &mut Vec<ScanHit>,
 ) -> AnyResult<()> {
     let file = File::open(path)?;
     let mut zip = zip::ZipArchive::new(file)?;
@@ -499,7 +449,7 @@ fn analyze_tar_like(
     base_url: &str,
     assets_root: &Path,
     ext: &str,
-    all_hits: &mut Vec<(String, String)>,
+    all_hits: &mut Vec<ScanHit>,
 ) -> AnyResult<()> {
     use bzip2::read::BzDecoder;
     use flate2::read::GzDecoder;
