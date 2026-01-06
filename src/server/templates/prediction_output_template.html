@@ -43,11 +43,6 @@
       box-sizing: border-box;
     }
 
-    html,
-    body {
-      height: 100%;
-    }
-
     body {
       margin: 0;
       font-family: var(--sans);
@@ -87,7 +82,6 @@
       border-radius: var(--r2);
       box-shadow: var(--shadow);
       overflow: hidden;
-      min-height: 0;
     }
 
     .top {
@@ -221,6 +215,7 @@
       color: var(--muted);
     }
 
+    /* Viewer */
     .head {
       padding: 14px;
       border-bottom: 1px solid var(--line);
@@ -242,9 +237,8 @@
     .viewer {
       padding: 14px;
       display: grid;
-      grid-template-columns: 1fr 380px;
+      grid-template-columns: 1fr 420px;
       gap: 14px;
-      min-height: 0;
     }
 
     @media (max-width: 980px) {
@@ -324,6 +318,29 @@
       font-size: 12px;
     }
 
+    .manualChecks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .chk {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.02);
+      font-family: var(--mono);
+      font-size: 12px;
+      user-select: none;
+    }
+
+    .chk input {
+      transform: scale(1.05);
+    }
+
     .probs {
       margin-top: 10px;
       display: flex;
@@ -367,10 +384,7 @@
       text-align: right;
     }
 
-    .gridWrap {
-      display: block;
-    }
-
+    /* Grid */
     .gridTop {
       padding: 14px;
       border-bottom: 1px solid var(--line);
@@ -423,6 +437,7 @@
       object-fit: cover;
       display: block;
       background: rgba(255, 255, 255, 0.02);
+      cursor: zoom-in;
     }
 
     .tileBody {
@@ -470,6 +485,7 @@
       color: var(--warn);
     }
 
+    /* Modal zoom */
     .modal {
       position: fixed;
       inset: 0;
@@ -538,7 +554,7 @@
         <div class="controls">
           <input id="search" class="row" type="text" placeholder="Search filename…" />
           <select id="filterManual">
-            <option value="">manual: (all)</option>
+            <option value="">manual contains: (all)</option>
           </select>
           <select id="filterPred">
             <option value="">pred: (all)</option>
@@ -549,17 +565,20 @@
             <button id="btnNext" class="btn-ghost">Next →</button>
             <button id="btnSave" class="btn-good">Save</button>
             <button id="btnDownload" class="btn-ghost">Download</button>
-            <button id="btnSetPred" class="btn-ghost">manual = pred</button>
+            <button id="btnSetPred" class="btn-ghost">manual = {pred}</button>
             <button id="btnClear" class="btn-danger">Clear</button>
           </div>
 
           <div class="pillrow">
+            <!-- now shows current/shown -->
             <span class="pill" id="countPill">0/0</span>
+            <span class="pill" id="shownPill">shown: 0/0</span>
             <span class="pill" id="changedPill">changed: 0</span>
             <span class="pill warn">
               keys: <span class="kbd">←</span><span class="kbd">→</span>
-              <span class="kbd">1..9</span> <span class="kbd">0</span>
-              <span class="kbd">S</span> <span class="kbd">Esc</span>
+              <span class="kbd">1..9</span> (toggle)
+              <span class="kbd">0</span> clear <span class="kbd">S</span> save
+              <span class="kbd">Esc</span>
             </span>
             <span class="pill good" id="savedPill" style="display: none">saved</span>
           </div>
@@ -568,8 +587,6 @@
 
       <div class="head">
         <div class="fileInfo" id="fileInfo"></div>
-        <!-- NEW: current position in filtered list -->
-        <span class="pill" id="posPill">0/0</span>
       </div>
 
       <div class="viewer">
@@ -580,19 +597,16 @@
 
         <div>
           <div class="section">
-            <h3>Label</h3>
-            <div class="kv">
-              <div class="k">Manual</div>
-              <div class="v">
-                <select id="manualSelect" style="width: 100%; padding: 10px; border-radius: 14px"></select>
-              </div>
-
+            <h3>Labels (multi)</h3>
+            <div class="kv" style="margin-bottom: 10px">
               <div class="k">Pred</div>
               <div class="v" id="predLabel"></div>
 
               <div class="k">Prob</div>
               <div class="v" id="predProb"></div>
             </div>
+
+            <div class="manualChecks" id="manualChecks"></div>
           </div>
 
           <div class="section">
@@ -603,10 +617,12 @@
       </div>
     </div>
 
-    <div class="card gridWrap" id="thumbsCard">
+    <div class="card" id="thumbsCard">
       <div class="gridTop">
-        <div class="gridTitle">Thumbnails (click to open / select)</div>
-        <div class="pill">Tip: click any image to zoom</div>
+        <div class="gridTitle">
+          Thumbnails (click to select · click image to zoom)
+        </div>
+        <div class="pill">multi-label saved as one-hot TRUE/FALSE</div>
       </div>
       <div class="grid" id="grid"></div>
     </div>
@@ -663,31 +679,6 @@
       return await r.text();
     }
 
-    // annotations.csv (one-hot):
-    // filename,<label1>,<label2>,...
-    // a.png,FALSE,TRUE,...
-    function buildAnnotationsCsv() {
-      const lines = [];
-
-      // header
-      lines.push(["filename", ...STATE.labels].map(csvEsc).join(","));
-
-      // stable order
-      const rows = [...STATE.rows].sort((a, b) =>
-        String(a.file).localeCompare(String(b.file)),
-      );
-
-      for (const r of rows) {
-        const chosen = String(r.manual_label || "").trim();
-        const flags = STATE.labels.map((lbl) =>
-          lbl === chosen ? "TRUE" : "FALSE",
-        );
-        lines.push([r.file, ...flags].map(csvEsc).join(","));
-      }
-
-      return lines.join("\n") + "\n";
-    }
-
     function showSaved(msg) {
       const el = document.getElementById("savedPill");
       el.textContent = msg || "saved";
@@ -695,6 +686,25 @@
       setTimeout(() => {
         el.style.display = "none";
       }, 1200);
+    }
+
+    function buildAnnotationsCsv() {
+      // one-hot multi-label
+      const lines = [];
+      lines.push(["filename", ...STATE.labels].map(csvEsc).join(","));
+
+      const rows = [...STATE.rows].sort((a, b) =>
+        String(a.file).localeCompare(String(b.file)),
+      );
+
+      for (const r of rows) {
+        const set = r.manual_set || new Set();
+        const flags = STATE.labels.map((lbl) =>
+          set.has(lbl) ? "TRUE" : "FALSE",
+        );
+        lines.push([r.file, ...flags].map(csvEsc).join(","));
+      }
+      return lines.join("\n") + "\n";
     }
 
     async function saveToServer() {
@@ -720,28 +730,6 @@
       showSaved("downloaded");
     }
 
-    function renderStats() {
-      const total = STATE.rows.length;
-      const shown = STATE.filteredIdx.length;
-      let changed = 0;
-      for (const r of STATE.rows) {
-        const ml = r.manual_label || "";
-        if (ml !== "" && ml !== (r.top_label || "")) changed++;
-      }
-      document.getElementById("countPill").textContent = `${shown}/${total}`;
-      document.getElementById("changedPill").textContent =
-        `changed: ${changed}`;
-    }
-
-    // NEW: current position in filtered list
-    function updatePositionPill() {
-      const idx = STATE.filteredIdx;
-      const total = idx.length;
-      const pos = total ? idx.indexOf(STATE.activeIdx) + 1 : 0;
-      const el = document.getElementById("posPill");
-      if (el) el.textContent = `${pos}/${total}`;
-    }
-
     function openZoomByFile(file) {
       const modal = document.getElementById("modal");
       const img = document.getElementById("modalImg");
@@ -753,6 +741,11 @@
       document.getElementById("modal").classList.remove("open");
     }
 
+    function rowHasManualLabel(r, label) {
+      const set = r.manual_set || new Set();
+      return set.has(label);
+    }
+
     function applyFilters() {
       const q = document.getElementById("search").value.trim().toLowerCase();
       const fMan = document.getElementById("filterManual").value;
@@ -762,14 +755,40 @@
       for (let i = 0; i < STATE.rows.length; i++) {
         const r = STATE.rows[i];
         if (q && !String(r.file).toLowerCase().includes(q)) continue;
-        if (fMan && String(r.manual_label || "") !== fMan) continue;
         if (fPred && String(r.top_label || "") !== fPred) continue;
+        if (fMan && !rowHasManualLabel(r, fMan)) continue;
         idx.push(i);
       }
+
       STATE.filteredIdx = idx;
       if (!idx.includes(STATE.activeIdx))
         STATE.activeIdx = idx.length ? idx[0] : 0;
       renderAll();
+    }
+
+    function renderStats() {
+      const totalAll = STATE.rows.length;
+      const shown = STATE.filteredIdx.length;
+      const pos = shown ? STATE.filteredIdx.indexOf(STATE.activeIdx) + 1 : 0;
+
+      const countEl = document.getElementById("countPill");
+      if (countEl) countEl.textContent = `${pos}/${shown}`;
+
+      const shownEl = document.getElementById("shownPill");
+      if (shownEl) shownEl.textContent = `shown: ${shown}/${totalAll}`;
+
+      let changed = 0;
+      for (const r of STATE.rows) {
+        const set = r.manual_set || new Set();
+        const pred = r.top_label || "";
+        // changed if set is not exactly {pred}
+        const isSame =
+          (pred === "" && set.size === 0) ||
+          (pred !== "" && set.size === 1 && set.has(pred));
+        if (!isSame) changed++;
+      }
+      const chEl = document.getElementById("changedPill");
+      if (chEl) chEl.textContent = `changed: ${changed}`;
     }
 
     function renderViewer() {
@@ -791,36 +810,34 @@
         r.top_prob,
       ).toFixed(4);
 
-      const sel = document.getElementById("manualSelect");
-      sel.innerHTML = "";
-      const opt0 = document.createElement("option");
-      opt0.value = "";
-      opt0.textContent = "(empty)";
-      sel.appendChild(opt0);
+      // manual checkboxes
+      const wrap = document.getElementById("manualChecks");
+      wrap.innerHTML = "";
+      if (!r.manual_set) r.manual_set = new Set();
 
       for (const lbl of STATE.labels) {
-        const opt = document.createElement("option");
-        opt.value = lbl;
-        opt.textContent = lbl;
-        sel.appendChild(opt);
-      }
-      if (
-        r.manual_label &&
-        r.manual_label !== "" &&
-        !STATE.labels.includes(r.manual_label)
-      ) {
-        const opt = document.createElement("option");
-        opt.value = r.manual_label;
-        opt.textContent = r.manual_label;
-        sel.appendChild(opt);
+        const lab = document.createElement("label");
+        lab.className = "chk";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = r.manual_set.has(lbl);
+
+        cb.onchange = () => {
+          if (cb.checked) r.manual_set.add(lbl);
+          else r.manual_set.delete(lbl);
+          renderAll(false);
+        };
+
+        const txt = document.createElement("span");
+        txt.textContent = lbl;
+
+        lab.appendChild(cb);
+        lab.appendChild(txt);
+        wrap.appendChild(lab);
       }
 
-      sel.value = r.manual_label || "";
-      sel.onchange = () => {
-        r.manual_label = sel.value;
-        renderAll(false);
-      };
-
+      // probs
       const probsEl = document.getElementById("probs");
       probsEl.innerHTML = "";
       const frag = document.createDocumentFragment();
@@ -873,7 +890,6 @@
         img.className = "tileImg";
         img.src = encodeSrc(r.file);
         img.alt = r.file;
-
         img.onclick = (ev) => {
           ev.stopPropagation();
           openZoomByFile(r.file);
@@ -897,13 +913,19 @@
         bPred.textContent = `pred: ${r.top_label}`;
         badges.appendChild(bPred);
 
+        const set = r.manual_set || new Set();
+        const chosen = [...set].sort().join("+") || "(empty)";
         const bMan = document.createElement("span");
         bMan.className = "badge manual";
-        bMan.textContent = `manual: ${r.manual_label || "(empty)"}`;
+        bMan.textContent = `manual: ${chosen}`;
         badges.appendChild(bMan);
 
-        const changed = (r.manual_label || "") !== (r.top_label || "");
-        if (changed && (r.manual_label || "") !== "") {
+        // changed marker
+        const pred = r.top_label || "";
+        const isSame =
+          (pred === "" && set.size === 0) ||
+          (pred !== "" && set.size === 1 && set.has(pred));
+        if (!isSame) {
           const bCh = document.createElement("span");
           bCh.className = "badge changed";
           bCh.textContent = "changed";
@@ -921,19 +943,13 @@
 
     function renderAll(scrollGrid = true) {
       renderStats();
-      updatePositionPill(); // NEW
       renderViewer();
       renderGrid();
 
       if (scrollGrid) {
         const grid = document.getElementById("grid");
         const active = grid.querySelector(".tile.active");
-        if (active) {
-          const r = active.getBoundingClientRect();
-          const gr = grid.getBoundingClientRect();
-          if (r.top < gr.top || r.bottom > gr.bottom)
-            active.scrollIntoView({block: "center"});
-        }
+        if (active) active.scrollIntoView({block: "nearest"});
       }
     }
 
@@ -949,23 +965,28 @@
     function setManualPred() {
       const r = STATE.rows[STATE.activeIdx];
       if (!r) return;
-      r.manual_label = r.top_label || "";
+      r.manual_set = new Set();
+      const pred = r.top_label || "";
+      if (pred) r.manual_set.add(pred);
       renderAll(false);
     }
 
     function clearLabel() {
       const r = STATE.rows[STATE.activeIdx];
       if (!r) return;
-      r.manual_label = "";
+      r.manual_set = new Set();
       renderAll(false);
     }
 
-    function setLabelByIndex(oneBased) {
+    function toggleLabelByIndex(oneBased) {
       const r = STATE.rows[STATE.activeIdx];
       if (!r) return;
       const i = oneBased - 1;
       if (i < 0 || i >= STATE.labels.length) return;
-      r.manual_label = STATE.labels[i];
+      if (!r.manual_set) r.manual_set = new Set();
+      const lbl = STATE.labels[i];
+      if (r.manual_set.has(lbl)) r.manual_set.delete(lbl);
+      else r.manual_set.add(lbl);
       renderAll(false);
     }
 
@@ -977,26 +998,57 @@
       const head = parseCsvLine(lines.shift() || "");
       const idx = Object.fromEntries(head.map((h, i) => [h, i]));
 
+      // labels from p_*
       const labels = head
         .filter((h) => h.startsWith("p_"))
         .map((h) => h.slice(2));
       STATE.labels = labels;
 
+      // read annotations (supports legacy file/manual_label OR new one-hot)
       const annText = await fetchTextIfExists("annotations.csv");
-      const annMap = new Map();
+      const annMap = new Map(); // file -> Set(labels)
+
       if (annText) {
         const al = annText.trim().split(/\r?\n/);
         const ah = parseCsvLine(al.shift() || "");
         const aidx = Object.fromEntries(ah.map((h, i) => [h, i]));
+
+        const isLegacy = aidx["manual_label"] != null;
+        const fileKey =
+          aidx["file"] != null
+            ? "file"
+            : aidx["filename"] != null
+              ? "filename"
+              : null;
+
         for (const line of al) {
           if (!line.trim()) continue;
           const c = parseCsvLine(line);
-          const f = c[aidx["file"]];
-          const ml = c[aidx["manual_label"]] ?? "";
-          if (f) annMap.set(f, ml);
+          const f = fileKey ? c[aidx[fileKey]] || "" : "";
+          if (!f) continue;
+
+          if (isLegacy) {
+            const ml = (c[aidx["manual_label"]] || "").trim();
+            const s = new Set();
+            if (ml) s.add(ml);
+            annMap.set(f, s);
+          } else {
+            const s = new Set();
+            for (const lbl of STATE.labels) {
+              const col = aidx[lbl];
+              if (col == null) continue;
+              const v = String(c[col] ?? "")
+                .trim()
+                .toUpperCase();
+              if (v === "TRUE" || v === "1" || v === "YES" || v === "T")
+                s.add(lbl);
+            }
+            annMap.set(f, s);
+          }
         }
       }
 
+      // rows
       const rows = [];
       for (const line of lines) {
         if (!line.trim()) continue;
@@ -1015,12 +1067,18 @@
         }
         probs.sort((a, b) => b.value - a.value);
 
-        const manual = annMap.has(file) ? annMap.get(file) : topLabel || "";
+        // manual_set: from annotations or default {pred}
+        let manual_set = annMap.get(file);
+        if (!manual_set) {
+          manual_set = new Set();
+          if (topLabel) manual_set.add(topLabel);
+        }
+
         rows.push({
           file,
           top_label: topLabel,
           top_prob: topProb,
-          manual_label: manual,
+          manual_set,
           probs,
         });
       }
@@ -1029,20 +1087,19 @@
       STATE.filteredIdx = rows.map((_, i) => i);
       STATE.activeIdx = STATE.filteredIdx.length ? STATE.filteredIdx[0] : 0;
 
+      // fill filters
       const filterManual = document.getElementById("filterManual");
       const filterPred = document.getElementById("filterPred");
-      const uniqMan = new Set(rows.map((r) => r.manual_label || ""));
-      const uniqPred = new Set(rows.map((r) => r.top_label || ""));
 
-      [...uniqMan]
-        .filter(Boolean)
-        .sort()
-        .forEach((v) => {
-          const o = document.createElement("option");
-          o.value = v;
-          o.textContent = v;
-          filterManual.appendChild(o);
-        });
+      // manual filter: list all labels
+      for (const lbl of STATE.labels) {
+        const o = document.createElement("option");
+        o.value = lbl;
+        o.textContent = lbl;
+        filterManual.appendChild(o);
+      }
+
+      const uniqPred = new Set(rows.map((r) => r.top_label || ""));
       [...uniqPred]
         .filter(Boolean)
         .sort()
@@ -1053,6 +1110,7 @@
           filterPred.appendChild(o);
         });
 
+      // events
       document
         .getElementById("search")
         .addEventListener("input", applyFilters);
@@ -1073,17 +1131,18 @@
         }
       };
 
+      // zoom
       document.getElementById("bigimg").onclick = () => {
         const r = STATE.rows[STATE.activeIdx];
         if (r) openZoomByFile(r.file);
       };
-
       document.getElementById("modalClose").onclick = closeZoom;
       document.getElementById("modalImg").onclick = closeZoom;
       document.getElementById("modal").onclick = (ev) => {
         if (ev.target.id === "modal") closeZoom();
       };
 
+      // hotkeys
       window.addEventListener("keydown", async (ev) => {
         const tag =
           ev.target && ev.target.tagName
@@ -1102,7 +1161,7 @@
           clearLabel();
         } else if (/^[1-9]$/.test(ev.key)) {
           ev.preventDefault();
-          setLabelByIndex(Number(ev.key));
+          toggleLabelByIndex(Number(ev.key));
         } else if (ev.key === "s" || ev.key === "S") {
           ev.preventDefault();
           try {
