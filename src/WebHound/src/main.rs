@@ -182,8 +182,7 @@ fn analyze_and_maybe_serve(
     serve: bool,
     port: u16,
 ) -> Result<()> {
-    fs::create_dir_all(out_dir)
-        .map_err(|e| anyhow!("Не создать {}: {e}", out_dir.display()))?;
+    fs::create_dir_all(out_dir).map_err(|e| anyhow!("Не создать {}: {e}", out_dir.display()))?;
 
     let runner = EyeballerRunner::new(model, Labels::eyeballer_default())?;
     let (_csv, html) = runner.infer_to_csv_html(images_dir, out_dir, "predictions.csv", None)?;
@@ -282,7 +281,9 @@ async fn main() -> Result<()> {
                 enable_year_fallback: year_fallback,
             });
 
-            let paths = run_scan(&target).await.map_err(|e| anyhow!(e.to_string()))?;
+            let paths = run_scan(&target)
+                .await
+                .map_err(|e| anyhow!(e.to_string()))?;
             println!("Скан завершён. Результаты: {}", paths.base.display());
 
             if analyze {
@@ -323,4 +324,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-

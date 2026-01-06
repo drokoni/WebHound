@@ -1,19 +1,57 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::{
     fs,
-    path::{Path},
+    io::Read,
+    path::{Path, PathBuf},
 };
 
 pub fn server(out_dir: &Path, port: u16) -> Result<()> {
-    use tiny_http::{Header, Response, Server};
+    use tiny_http::{Header, Method, Response, Server};
 
     let server =
         Server::http(format!("127.0.0.1:{port}")).map_err(|e| anyhow!("Server::http: {e}"))?;
-    println!("Report available at: http://127.0.0.1:{port}/");
-    println!("Serving from: {}", out_dir.display());
-    let parent = out_dir.parent().map(Path::to_path_buf);
 
-    for rq in server.incoming_requests() {
+    println!("Report available at: http://127.0.0.1:{port}/");
+    println!("Serving report from: {}", out_dir.display());
+
+    let parent = out_dir.parent().map(Path::to_path_buf);
+    if let Some(p) = &parent {
+        println!("Also serving files from parent: {}", p.display());
+    }
+
+    for mut rq in server.incoming_requests() {
+        // API: сохранить annotations.csv
+        if rq.method() == &Method::Post && rq.url().split('?').next() == Some("/api/annotations") {
+            let mut body = String::new();
+            rq.as_reader().read_to_string(&mut body).ok();
+
+            // простой лимит, чтобы не улететь в память случайно
+            if body.len() > 20 * 1024 * 1024 {
+                let resp = Response::from_string("413\n").with_status_code(413);
+                let _ = rq.respond(resp);
+                continue;
+            }
+
+            let ann_path = out_dir.join("annotations.csv");
+            let tmp_path = out_dir.join("annotations.csv.tmp");
+
+            if let Err(e) =
+                fs::write(&tmp_path, body.as_bytes()).and_then(|_| fs::rename(&tmp_path, &ann_path))
+            {
+                let resp = Response::from_string(format!("500: {e}\n")).with_status_code(500);
+                let _ = rq.respond(resp);
+                continue;
+            }
+
+            let mut resp = Response::from_string("ok\n").with_status_code(200);
+            if let Ok(h) = Header::from_bytes("Content-Type", "text/plain") {
+                resp.add_header(h);
+            }
+            let _ = rq.respond(resp);
+            continue;
+        }
+
+        // обычная раздача файлов
         let raw = rq.url();
         let raw = raw.split('?').next().unwrap_or(raw);
         let raw = raw.split('#').next().unwrap_or(raw);
@@ -23,30 +61,33 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             req_path.push_str("index.html");
         }
 
-        while let Some(pos) = req_path.find("/../") {
-            if let Some(prev) = req_path[..pos].rfind('/') {
-                req_path.replace_range(prev..pos + 4, "");
-            } else {
-                req_path.replace_range(0..pos + 4, "");
+        while req_path.starts_with("../") {
+            req_path = req_path[3..].to_string();
+        }
+
+        if req_path
+            .split('/')
+            .any(|seg| seg == ".." || seg.contains('\\') || seg.is_empty())
+        {
+            let resp = Response::from_string("400\n").with_status_code(400);
+            let _ = rq.respond(resp);
+            continue;
+        }
+
+        let mut chosen: Option<PathBuf> = None;
+
+        let cand1 = out_dir.join(&req_path);
+        if cand1.is_file() {
+            chosen = Some(cand1);
+        } else if let Some(parent_dir) = &parent {
+            let cand2 = parent_dir.join(&req_path);
+            if cand2.is_file() {
+                chosen = Some(cand2);
             }
         }
 
-        let fs_path = if req_path.starts_with("../") {
-            let mut rest = req_path.as_str();
-            while rest.starts_with("../") {
-                rest = &rest[3..];
-            }
-            if let Some(ref parent_dir) = parent {
-                parent_dir.join(rest)
-            } else {
-                out_dir.join(rest)
-            }
-        } else {
-            out_dir.join(&req_path)
-        };
-
-        let mut resp = if fs_path.is_file() {
-            match fs::read(&fs_path) {
+        let mut resp = if let Some(fs_path) = &chosen {
+            match fs::read(fs_path) {
                 Ok(bytes) => Response::from_data(bytes),
                 Err(e) => Response::from_string(format!("500: {e}\n")).with_status_code(500),
             }
@@ -78,7 +119,6 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             }
         }
 
-        eprintln!("[{}] {} -> {}", rq.method(), raw, fs_path.display());
         let _ = rq.respond(resp);
     }
 

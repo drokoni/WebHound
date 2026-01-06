@@ -1,241 +1,1293 @@
 <!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{TITLE}</title>
 
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Eyeballer ONNX Report</title>
-  <style>
-    body {
-      font-family:
-        system-ui,
-        Segoe UI,
-        Roboto,
-        Helvetica,
-        Arial,
-        sans-serif;
-      margin: 24px;
-    }
-
-    table {
-      border-collapse: collapse;
-      width: 100%;
-    }
-
-    th,
-    td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      font-size: 14px;
-    }
-
-    th {
-      background: #f5f5f5;
-      cursor: pointer;
-      user-select: none;
-    }
-
-    th.sort-asc::after {
-      content: " ▲";
-      font-size: 11px;
-    }
-
-    th.sort-desc::after {
-      content: " ▼";
-      font-size: 11px;
-    }
-
-    img.thumb {
-      height: 110px;
-    }
-
-    .prob {
-      font-variant-numeric: tabular-nums;
-    }
-
-    .controls {
-      margin-bottom: 16px;
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    .controls label {
-      font-size: 14px;
-    }
-  </style>
-</head>
-
-<body>
-  <h1>Eyeballer ONNX Report</h1>
-  <p>
-    Images dir: <code>{IMAGES_DIR}</code> · CSV:
-    <a href="./{CSV_NAME}">{CSV_NAME}</a>
-  </p>
-
-  <div class="controls">
-    <label>
-      Фильтр по классу:
-      <select id="labelFilter">
-        <option value="">(все)</option>
-      </select>
-    </label>
-    <span id="countInfo"></span>
-  </div>
-
-  <table id="reportTable">
-    <thead>
-      <tr>
-        <th data-col="image" data-sortable="false">Image</th>
-        <th data-col="top_label" data-sortable="true">Top label</th>
-        <th data-col="top_prob" data-sortable="true">Top prob</th>
-        <th data-col="all_probs" data-sortable="false">All probs</th>
-      </tr>
-    </thead>
-    <tbody id="rows"></tbody>
-  </table>
-
-  <script>
-    // всё состояние держим в памяти
-    const STATE = {
-      rows: [], // все строки из CSV
-      filtered: [], // отфильтрованные по селекту
-      sort: {col: null, dir: "asc"}, // текущая сортировка
-    };
-
-    async function main() {
-      const csvName = "{CSV_NAME}";
-      const text = await fetch(csvName).then((r) => r.text());
-      const lines = text.trim().split(/\r?\n/);
-      const head = lines.shift().split(",");
-      const idx = Object.fromEntries(head.map((h, i) => [h, i]));
-
-      const labelSet = new Set();
-      const allRows = [];
-
-      for (const line of lines) {
-        const cols = line.split(",");
-        const file = cols[idx["file"]];
-        const topLabel = cols[idx["top_label"]];
-        const topProb = Number(cols[idx["top_prob"]]) || 0;
-
-        labelSet.add(topLabel);
-
-        const probsHtml = head
-          .filter((h) => h.startsWith("p_"))
-          .map((h) => `${h}=${Number(cols[idx[h]]).toFixed(4)}`)
-          .join("<br>");
-
-        allRows.push({
-          file,
-          top_label: topLabel,
-          top_prob: topProb,
-          probs_html: probsHtml,
-        });
+    <style>
+      :root {
+        --bg: #0b0f14;
+        --panel: #0f1621;
+        --panel2: #101a28;
+        --text: #e7eef9;
+        --muted: #a8b3c5;
+        --line: rgba(255, 255, 255, 0.08);
+        --accent: #6aa9ff;
+        --good: #38d996;
+        --warn: #ffcc66;
+        --bad: #ff6b6b;
+        --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+        --r: 16px;
+        --r2: 22px;
+        --mono:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        --sans: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
       }
 
-      STATE.rows = allRows;
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f6f7fb;
+          --panel: #ffffff;
+          --panel2: #f6f8ff;
+          --text: #101828;
+          --muted: #667085;
+          --line: rgba(16, 24, 40, 0.12);
+          --shadow: 0 14px 32px rgba(16, 24, 40, 0.12);
+        }
+      }
 
-      // заполним селект
-      const labelFilter = document.getElementById("labelFilter");
-      [...labelSet].sort().forEach((lbl) => {
-        const opt = document.createElement("option");
-        opt.value = lbl;
-        opt.textContent = lbl;
-        labelFilter.appendChild(opt);
-      });
+      * {
+        box-sizing: border-box;
+      }
 
-      labelFilter.addEventListener("change", () => {
-        applyFilterAndRender();
-      });
+      html,
+      body {
+        height: 100%;
+      }
 
-      // повесим сортировку на заголовки
-      const thead = document.querySelector("#reportTable thead");
-      thead.addEventListener("click", (ev) => {
-        const th = ev.target.closest("th");
-        if (!th) return;
-        const col = th.dataset.col;
-        const sortable = th.dataset.sortable === "true";
-        if (!sortable) return;
+      body {
+        margin: 0;
+        font-family: var(--sans);
+        background:
+          radial-gradient(
+            1200px 800px at 15% -10%,
+            rgba(106, 169, 255, 0.14),
+            transparent 55%
+          ),
+          radial-gradient(
+            900px 600px at 105% 0%,
+            rgba(56, 217, 150, 0.1),
+            transparent 55%
+          ),
+          var(--bg);
+        color: var(--text);
+      }
 
-        // если щёлкнули по той же колонке — меняем направление
-        if (STATE.sort.col === col) {
-          STATE.sort.dir = STATE.sort.dir === "asc" ? "desc" : "asc";
-        } else {
-          STATE.sort.col = col;
-          STATE.sort.dir = "asc";
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 14px;
+        padding: 14px;
+        height: 100vh;
+      }
+
+      @media (max-width: 980px) {
+        .app {
+          grid-template-columns: 1fr;
+          height: auto;
+        }
+      }
+
+      .card {
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.03),
+          rgba(255, 255, 255, 0)
+        );
+        background-color: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--r2);
+        box-shadow: var(--shadow);
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .topbar {
+        padding: 14px 14px 10px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .title {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: flex-start;
+      }
+
+      .title h1 {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.2;
+        letter-spacing: 0.2px;
+      }
+
+      .meta {
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .meta code {
+        font-family: var(--mono);
+        font-size: 11px;
+        padding: 1px 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .controls {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .controls .row {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      input,
+      select,
+      button {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px 10px;
+        font-size: 13px;
+        outline: none;
+      }
+
+      input::placeholder {
+        color: rgba(168, 179, 197, 0.7);
+      }
+
+      button {
+        cursor: pointer;
+        user-select: none;
+        transition:
+          transform 0.06s ease,
+          background 0.15s ease,
+          border-color 0.15s ease;
+        background: rgba(106, 169, 255, 0.1);
+        border-color: rgba(106, 169, 255, 0.25);
+      }
+
+      button:hover {
+        background: rgba(106, 169, 255, 0.16);
+      }
+
+      button:active {
+        transform: translateY(1px);
+      }
+
+      .btn-ghost {
+        background: rgba(255, 255, 255, 0.03);
+        border-color: var(--line);
+      }
+
+      .btn-danger {
+        background: rgba(255, 107, 107, 0.12);
+        border-color: rgba(255, 107, 107, 0.28);
+      }
+
+      .btn-danger:hover {
+        background: rgba(255, 107, 107, 0.18);
+      }
+
+      .btn-good {
+        background: rgba(56, 217, 150, 0.12);
+        border-color: rgba(56, 217, 150, 0.28);
+      }
+
+      .btn-good:hover {
+        background: rgba(56, 217, 150, 0.18);
+      }
+
+      .status {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--muted);
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .pill {
+        font-size: 12px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .pill.good {
+        color: var(--good);
+        border-color: rgba(56, 217, 150, 0.25);
+        background: rgba(56, 217, 150, 0.08);
+      }
+
+      .pill.warn {
+        color: var(--warn);
+        border-color: rgba(255, 204, 102, 0.25);
+        background: rgba(255, 204, 102, 0.08);
+      }
+
+      .progress {
+        height: 10px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        overflow: hidden;
+        width: 100%;
+        margin-top: 10px;
+      }
+
+      .progress > div {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(
+          90deg,
+          rgba(106, 169, 255, 0.9),
+          rgba(56, 217, 150, 0.9)
+        );
+      }
+
+      .list {
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        overflow: auto;
+        min-height: 0;
+      }
+
+      .item {
+        display: grid;
+        grid-template-columns: 86px 1fr;
+        gap: 10px;
+        padding: 10px;
+        border-radius: var(--r);
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.02);
+        cursor: pointer;
+        transition:
+          background 0.15s ease,
+          border-color 0.15s ease;
+      }
+
+      .item:hover {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(106, 169, 255, 0.22);
+      }
+
+      .item.active {
+        background: rgba(106, 169, 255, 0.1);
+        border-color: rgba(106, 169, 255, 0.35);
+      }
+
+      .thumb {
+        width: 86px;
+        height: 54px;
+        border-radius: 12px;
+        object-fit: cover;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .item .name {
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.3;
+        color: var(--text);
+        word-break: break-all;
+      }
+
+      .badges {
+        margin-top: 6px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .badge {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .badge.pred {
+        border-color: rgba(106, 169, 255, 0.24);
+        background: rgba(106, 169, 255, 0.08);
+        color: var(--accent);
+      }
+
+      .badge.manual {
+        border-color: rgba(56, 217, 150, 0.24);
+        background: rgba(56, 217, 150, 0.08);
+        color: var(--good);
+      }
+
+      .badge.changed {
+        border-color: rgba(255, 204, 102, 0.25);
+        background: rgba(255, 204, 102, 0.08);
+        color: var(--warn);
+      }
+
+      .main {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 14px;
+        min-height: 0;
+      }
+
+      .viewer {
+        display: grid;
+        grid-template-columns: 1fr 360px;
+        gap: 14px;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      @media (max-width: 980px) {
+        .viewer {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .panel {
+        padding: 14px;
+      }
+
+      .viewerTop {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        padding: 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .viewerTop .nav {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .viewerTop .nav button {
+        padding: 10px 12px;
+        border-radius: 12px;
+      }
+
+      .viewerTop .file {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+        word-break: break-all;
+        max-width: min(900px, 75vw);
+      }
+
+      .imgWrap {
+        height: calc(100vh - 14px - 14px - 14px - 62px);
+        /* app padding + gaps + topbar approx */
+        min-height: 360px;
+        overflow: hidden;
+        border-radius: var(--r2);
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.02);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+
+      @media (max-width: 980px) {
+        .imgWrap {
+          height: 55vh;
+        }
+      }
+
+      .bigimg {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        cursor: zoom-in;
+      }
+
+      .hint {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        font-size: 12px;
+        color: var(--muted);
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        padding: 6px 10px;
+        border-radius: 999px;
+        backdrop-filter: blur(6px);
+      }
+
+      @media (prefers-color-scheme: light) {
+        .hint {
+          background: rgba(255, 255, 255, 0.55);
+          border-color: rgba(16, 24, 40, 0.18);
+        }
+      }
+
+      .sideInfo .section {
+        border: 1px solid var(--line);
+        border-radius: var(--r2);
+        background: rgba(255, 255, 255, 0.02);
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+
+      .sideInfo h3 {
+        margin: 0 0 8px 0;
+        font-size: 13px;
+        color: var(--muted);
+        font-weight: 600;
+        letter-spacing: 0.2px;
+      }
+
+      .kv {
+        display: grid;
+        grid-template-columns: 92px 1fr;
+        gap: 8px;
+        font-size: 13px;
+        align-items: center;
+      }
+
+      .kv .k {
+        color: var(--muted);
+      }
+
+      .kv .v {
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+
+      .probs {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .barrow {
+        display: grid;
+        grid-template-columns: 1fr 54px;
+        gap: 10px;
+        align-items: center;
+        font-size: 12px;
+      }
+
+      .bar {
+        height: 10px;
+        border-radius: 999px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .bar > div {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(
+          90deg,
+          rgba(106, 169, 255, 0.95),
+          rgba(56, 217, 150, 0.95)
+        );
+      }
+
+      .barrow .p {
+        font-family: var(--mono);
+        color: var(--muted);
+        text-align: right;
+      }
+
+      .footerHint {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .kbd {
+        font-family: var(--mono);
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      /* Modal */
+      .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.65);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        padding: 22px;
+      }
+
+      .modal.open {
+        display: flex;
+      }
+
+      .modal .inner {
+        width: min(1280px, 100%);
+        height: min(860px, 100%);
+        border-radius: 22px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(10, 14, 20, 0.75);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        cursor: zoom-out;
+      }
+
+      .modal .close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="app">
+      <!-- SIDEBAR -->
+      <div class="sidebar card">
+        <div class="topbar">
+          <div class="title">
+            <h1>Eyeballer Labeler</h1>
+            <div class="pill" id="dirtyPill" style="display: none">unsaved</div>
+          </div>
+
+          <div class="meta">
+            <div>Images: <code>{IMAGES_DIR}</code></div>
+            <div style="margin-top: 6px">
+              Predictions: <a href="./{CSV_NAME}">{CSV_NAME}</a> &nbsp;·&nbsp;
+              Annotations: <a href="./annotations.csv">annotations.csv</a>
+            </div>
+          </div>
+
+          <div class="controls">
+            <input
+              id="search"
+              type="text"
+              placeholder="Search filename…"
+              class="row"
+            />
+            <select id="filterManual">
+              <option value="">manual: (all)</option>
+            </select>
+            <select id="filterPred">
+              <option value="">pred: (all)</option>
+            </select>
+
+            <div class="row">
+              <button id="btnSave" class="btn-good">Save</button>
+              <button id="btnDownload" class="btn-ghost">Download</button>
+              <button id="btnClear" class="btn-danger">Clear label</button>
+            </div>
+          </div>
+
+          <div class="status">
+            <span class="pill" id="countPill">0/0</span>
+            <span class="pill" id="changedPill">changed: 0</span>
+            <span class="pill warn" id="hintPill">
+              keys: <span class="kbd">←</span><span class="kbd">→</span>,
+              <span class="kbd">1..9</span>, <span class="kbd">0</span>,
+              <span class="kbd">S</span>
+            </span>
+          </div>
+          <div class="progress">
+            <div id="progBar"></div>
+          </div>
+        </div>
+
+        <div class="list" id="list"></div>
+      </div>
+
+      <!-- MAIN -->
+      <div class="main">
+        <div class="card">
+          <div class="viewerTop">
+            <div class="nav">
+              <button id="btnPrev" class="btn-ghost">← Prev</button>
+              <button id="btnNext" class="btn-ghost">Next →</button>
+              <button id="btnJumpUnchanged" class="btn-ghost">
+                Next changed
+              </button>
+            </div>
+            <div class="file" id="fileInfo"></div>
+          </div>
+
+          <div class="viewer panel">
+            <div class="imgWrap" id="imgWrap">
+              <img id="bigimg" class="bigimg" alt="preview" />
+              <div class="hint">Click to zoom</div>
+            </div>
+
+            <div class="sideInfo">
+              <div class="section">
+                <h3>Label</h3>
+                <div class="kv">
+                  <div class="k">Manual</div>
+                  <div class="v">
+                    <select
+                      id="manualSelect"
+                      style="width: 100%; padding: 10px; border-radius: 14px"
+                    ></select>
+                  </div>
+
+                  <div class="k">Pred</div>
+                  <div class="v" id="predLabel"></div>
+
+                  <div class="k">Prob</div>
+                  <div class="v" id="predProb"></div>
+                </div>
+                <div
+                  style="
+                    margin-top: 10px;
+                    display: flex;
+                    gap: 10px;
+                    flex-wrap: wrap;
+                  "
+                >
+                  <button id="btnCopyPred" class="btn-ghost">
+                    Set manual = pred
+                  </button>
+                  <button id="btnZoom" class="btn-ghost">Zoom</button>
+                </div>
+              </div>
+
+              <div class="section">
+                <h3>All probabilities</h3>
+                <div class="probs" id="probs"></div>
+              </div>
+
+              <div class="footerHint">
+                <div>
+                  <span class="kbd">1..9</span> set label (order of classes)
+                </div>
+                <div><span class="kbd">0</span> clear label</div>
+                <div><span class="kbd">S</span> save</div>
+                <div><span class="kbd">Esc</span> close zoom</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL -->
+    <div class="modal" id="modal">
+      <div class="inner">
+        <button class="close" id="modalClose">Esc / click image</button>
+        <img id="modalImg" alt="zoomed" />
+      </div>
+    </div>
+
+    <script>
+      const STATE = {
+        rows: [],
+        labels: [],
+        filteredIdx: [],
+        activeIdx: 0,
+        dirty: false,
+        sortKey: "file", // stable
+      };
+
+      function parseCsvLine(line) {
+        const out = [];
+        let cur = "";
+        let inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (inQ) {
+            if (ch === '"' && line[i + 1] === '"') {
+              cur += '"';
+              i++;
+            } else if (ch === '"') inQ = false;
+            else cur += ch;
+          } else {
+            if (ch === '"') inQ = true;
+            else if (ch === ",") {
+              out.push(cur);
+              cur = "";
+            } else cur += ch;
+          }
+        }
+        out.push(cur);
+        return out;
+      }
+
+      function csvEsc(v) {
+        const s = String(v ?? "");
+        if (/[,"\r\n]/.test(s)) return `"${s.replaceAll('"', '""')}"`;
+        return s;
+      }
+
+      function setDirty(on) {
+        STATE.dirty = on;
+        document.getElementById("dirtyPill").style.display = on
+          ? "inline-block"
+          : "none";
+      }
+
+      function encodeSrc(file) {
+        // важно: server отдаёт картинки из parent(out_dir),
+        // поэтому img src должен быть "./<file>"
+        const s = file.startsWith("./") ? file : `./${file}`;
+        return encodeURI(s);
+      }
+
+      async function fetchTextIfExists(name) {
+        const r = await fetch(name);
+        if (!r.ok) return null;
+        return await r.text();
+      }
+
+      function buildAnnotationsCsv() {
+        const lines = [];
+        lines.push(["file", "manual_label"].map(csvEsc).join(","));
+        const rows = [...STATE.rows].sort((a, b) =>
+          String(a.file).localeCompare(String(b.file)),
+        );
+        for (const r of rows)
+          lines.push([r.file, r.manual_label ?? ""].map(csvEsc).join(","));
+        return lines.join("\n") + "\n";
+      }
+
+      async function saveToServer() {
+        const csv = buildAnnotationsCsv();
+        const r = await fetch("/api/annotations", {
+          method: "POST",
+          headers: { "Content-Type": "text/csv;charset=utf-8" },
+          body: csv,
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        setDirty(false);
+      }
+
+      function downloadCsv() {
+        const csv = buildAnnotationsCsv();
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "annotations.csv";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+
+      function applyFilters() {
+        const q = document.getElementById("search").value.trim().toLowerCase();
+        const fMan = document.getElementById("filterManual").value;
+        const fPred = document.getElementById("filterPred").value;
+
+        const idx = [];
+        for (let i = 0; i < STATE.rows.length; i++) {
+          const r = STATE.rows[i];
+          if (q && !String(r.file).toLowerCase().includes(q)) continue;
+          if (fMan && String(r.manual_label || "") !== fMan) continue;
+          if (fPred && String(r.top_label || "") !== fPred) continue;
+          idx.push(i);
+        }
+        STATE.filteredIdx = idx;
+
+        // если текущий активный вылетел из фильтра — ставим первый
+        if (!idx.includes(STATE.activeIdx)) {
+          STATE.activeIdx = idx.length ? idx[0] : 0;
         }
 
-        applyFilterAndRender();
-      });
-
-      applyFilterAndRender();
-    }
-
-    function applyFilterAndRender() {
-      const selected = document.getElementById("labelFilter").value;
-      let data = STATE.rows;
-      if (selected) {
-        data = data.filter((r) => r.top_label === selected);
+        renderAll();
       }
-      // сортировка
-      if (STATE.sort.col) {
-        const {col, dir} = STATE.sort;
-        data = [...data].sort((a, b) => {
-          let av = a[col];
-          let bv = b[col];
-          // prob — число, top_label — строка
-          if (col === "top_prob") {
-            av = Number(av);
-            bv = Number(bv);
-            return dir === "asc" ? av - bv : bv - av;
-          } else {
-            // строковая сортировка
-            return dir === "asc"
-              ? String(av).localeCompare(String(bv))
-              : String(bv).localeCompare(String(av));
+
+      function renderSidebar() {
+        const el = document.getElementById("list");
+        el.innerHTML = "";
+        const frag = document.createDocumentFragment();
+
+        for (const i of STATE.filteredIdx) {
+          const r = STATE.rows[i];
+          const div = document.createElement("div");
+          div.className = "item" + (i === STATE.activeIdx ? " active" : "");
+          div.addEventListener("click", () => {
+            STATE.activeIdx = i;
+            renderAll();
+          });
+
+          const img = document.createElement("img");
+          img.className = "thumb";
+          img.src = encodeSrc(r.file);
+          img.onerror = () => {
+            img.style.display = "none";
+          };
+          div.appendChild(img);
+
+          const right = document.createElement("div");
+
+          const name = document.createElement("div");
+          name.className = "name";
+          name.textContent = r.file;
+          right.appendChild(name);
+
+          const badges = document.createElement("div");
+          badges.className = "badges";
+
+          const bPred = document.createElement("span");
+          bPred.className = "badge pred";
+          bPred.textContent = `pred: ${r.top_label}`;
+          badges.appendChild(bPred);
+
+          const bMan = document.createElement("span");
+          bMan.className = "badge manual";
+          bMan.textContent = `manual: ${r.manual_label || "(empty)"}`;
+          badges.appendChild(bMan);
+
+          const changed = (r.manual_label || "") !== (r.top_label || "");
+          if (changed && (r.manual_label || "") !== "") {
+            const bCh = document.createElement("span");
+            bCh.className = "badge changed";
+            bCh.textContent = "changed";
+            badges.appendChild(bCh);
+          }
+
+          right.appendChild(badges);
+          div.appendChild(right);
+
+          frag.appendChild(div);
+        }
+
+        el.appendChild(frag);
+      }
+
+      function renderViewer() {
+        const r = STATE.rows[STATE.activeIdx];
+        const fileInfo = document.getElementById("fileInfo");
+        fileInfo.textContent = r ? r.file : "(no items)";
+
+        const big = document.getElementById("bigimg");
+        if (!r) {
+          big.removeAttribute("src");
+          return;
+        }
+        big.src = encodeSrc(r.file);
+
+        document.getElementById("predLabel").textContent = String(r.top_label);
+        document.getElementById("predProb").textContent = Number(
+          r.top_prob,
+        ).toFixed(4);
+
+        // manual select
+        const sel = document.getElementById("manualSelect");
+        sel.innerHTML = "";
+        // option empty
+        const opt0 = document.createElement("option");
+        opt0.value = "";
+        opt0.textContent = "(empty)";
+        sel.appendChild(opt0);
+
+        for (const lbl of STATE.labels) {
+          const opt = document.createElement("option");
+          opt.value = lbl;
+          opt.textContent = lbl;
+          sel.appendChild(opt);
+        }
+
+        // если в annotations есть неизвестная метка — добавим
+        if (
+          r.manual_label &&
+          r.manual_label !== "" &&
+          !STATE.labels.includes(r.manual_label)
+        ) {
+          const opt = document.createElement("option");
+          opt.value = r.manual_label;
+          opt.textContent = r.manual_label;
+          sel.appendChild(opt);
+        }
+
+        sel.value = r.manual_label || "";
+        sel.onchange = () => {
+          r.manual_label = sel.value;
+          setDirty(true);
+          renderAll(false);
+        };
+
+        // probs
+        const probsEl = document.getElementById("probs");
+        probsEl.innerHTML = "";
+        const probs = r.probs || [];
+        const frag = document.createDocumentFragment();
+        for (const p of probs) {
+          const row = document.createElement("div");
+          row.className = "barrow";
+
+          const left = document.createElement("div");
+          left.style.display = "flex";
+          left.style.flexDirection = "column";
+          left.style.gap = "6px";
+
+          const label = document.createElement("div");
+          label.style.fontFamily = "var(--mono)";
+          label.style.fontSize = "12px";
+          label.textContent = p.label;
+
+          const bar = document.createElement("div");
+          bar.className = "bar";
+          const fill = document.createElement("div");
+          fill.style.width = `${Math.max(0, Math.min(1, p.value)) * 100}%`;
+          bar.appendChild(fill);
+
+          left.appendChild(label);
+          left.appendChild(bar);
+
+          const right = document.createElement("div");
+          right.className = "p";
+          right.textContent = p.value.toFixed(4);
+
+          row.appendChild(left);
+          row.appendChild(right);
+
+          frag.appendChild(row);
+        }
+        probsEl.appendChild(frag);
+      }
+
+      function renderStats() {
+        const total = STATE.rows.length;
+        const shown = STATE.filteredIdx.length;
+
+        let changed = 0;
+        for (const r of STATE.rows) {
+          const ml = r.manual_label || "";
+          if (ml !== "" && ml !== (r.top_label || "")) changed++;
+        }
+
+        document.getElementById("countPill").textContent = `${shown}/${total}`;
+        document.getElementById("changedPill").textContent =
+          `changed: ${changed}`;
+
+        // progress bar: сколько НЕ empty manual_label
+        let labeled = 0;
+        for (const r of STATE.rows)
+          if ((r.manual_label || "") !== "") labeled++;
+        const pct = total ? (labeled / total) * 100 : 0;
+        document.getElementById("progBar").style.width = `${pct}%`;
+      }
+
+      function renderAll(scrollSidebar = true) {
+        renderStats();
+        renderSidebar();
+        renderViewer();
+
+        if (scrollSidebar) {
+          const list = document.getElementById("list");
+          const active = list.querySelector(".item.active");
+          if (active) {
+            const r = active.getBoundingClientRect();
+            const lr = list.getBoundingClientRect();
+            if (r.top < lr.top || r.bottom > lr.bottom)
+              active.scrollIntoView({ block: "center" });
+          }
+        }
+      }
+
+      function nextItem(dir) {
+        const idx = STATE.filteredIdx;
+        if (!idx.length) return;
+
+        const pos = idx.indexOf(STATE.activeIdx);
+        const nextPos = pos === -1 ? 0 : (pos + dir + idx.length) % idx.length;
+
+        STATE.activeIdx = idx[nextPos];
+        renderAll();
+      }
+
+      function jumpNextChanged() {
+        const idx = STATE.filteredIdx;
+        if (!idx.length) return;
+
+        const startPos = idx.indexOf(STATE.activeIdx);
+        const start = startPos === -1 ? 0 : startPos;
+
+        for (let step = 1; step <= idx.length; step++) {
+          const i = idx[(start + step) % idx.length];
+          const r = STATE.rows[i];
+          const ml = r.manual_label || "";
+          if (ml !== "" && ml !== (r.top_label || "")) {
+            STATE.activeIdx = i;
+            renderAll();
+            return;
+          }
+        }
+      }
+
+      function setLabelByIndex(oneBased) {
+        const r = STATE.rows[STATE.activeIdx];
+        if (!r) return;
+        const i = oneBased - 1;
+        if (i < 0 || i >= STATE.labels.length) return;
+        r.manual_label = STATE.labels[i];
+        setDirty(true);
+        renderAll(false);
+      }
+
+      function clearLabel() {
+        const r = STATE.rows[STATE.activeIdx];
+        if (!r) return;
+        r.manual_label = "";
+        setDirty(true);
+        renderAll(false);
+      }
+
+      function setManualPred() {
+        const r = STATE.rows[STATE.activeIdx];
+        if (!r) return;
+        r.manual_label = r.top_label || "";
+        setDirty(true);
+        renderAll(false);
+      }
+
+      function openZoom() {
+        const r = STATE.rows[STATE.activeIdx];
+        if (!r) return;
+        const modal = document.getElementById("modal");
+        const img = document.getElementById("modalImg");
+        img.src = encodeSrc(r.file);
+        modal.classList.add("open");
+      }
+
+      function closeZoom() {
+        document.getElementById("modal").classList.remove("open");
+      }
+
+      async function main() {
+        const csvName = "{CSV_NAME}";
+        const predText = await fetch(csvName).then((r) => r.text());
+
+        const lines = predText.trim().split(/\r?\n/);
+        const head = parseCsvLine(lines.shift());
+        const idx = Object.fromEntries(head.map((h, i) => [h, i]));
+
+        // labels from p_*
+        const labels = head
+          .filter((h) => h.startsWith("p_"))
+          .map((h) => h.slice(2));
+        STATE.labels = labels;
+
+        // load annotations if exists
+        const annText = await fetchTextIfExists("annotations.csv");
+        const annMap = new Map();
+        if (annText) {
+          const al = annText.trim().split(/\r?\n/);
+          const ah = parseCsvLine(al.shift() || "");
+          const aidx = Object.fromEntries(ah.map((h, i) => [h, i]));
+          for (const line of al) {
+            if (!line.trim()) continue;
+            const c = parseCsvLine(line);
+            const f = c[aidx["file"]];
+            const ml = c[aidx["manual_label"]] ?? "";
+            if (f) annMap.set(f, ml);
+          }
+        }
+
+        // parse predictions
+        const rows = [];
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const c = parseCsvLine(line);
+          const file = c[idx["file"]];
+          const topLabel = c[idx["top_label"]];
+          const topProb = Number(c[idx["top_prob"]]) || 0;
+
+          const probs = [];
+          for (const h of head) {
+            if (!h.startsWith("p_")) continue;
+            const lbl = h.slice(2);
+            const v = Number(c[idx[h]]) || 0;
+            probs.push({ label: lbl, value: v });
+          }
+          // sort probs desc for display
+          probs.sort((a, b) => b.value - a.value);
+
+          const manual = annMap.has(file) ? annMap.get(file) : topLabel || "";
+
+          rows.push({
+            file,
+            top_label: topLabel,
+            top_prob: topProb,
+            manual_label: manual,
+            probs,
+          });
+        }
+
+        STATE.rows = rows;
+        STATE.filteredIdx = rows.map((_, i) => i);
+        STATE.activeIdx = STATE.filteredIdx.length ? STATE.filteredIdx[0] : 0;
+
+        // fill filter selects
+        const filterManual = document.getElementById("filterManual");
+        const filterPred = document.getElementById("filterPred");
+
+        const uniqManual = new Set(rows.map((r) => r.manual_label || ""));
+        const uniqPred = new Set(rows.map((r) => r.top_label || ""));
+
+        [...uniqManual]
+          .filter(Boolean)
+          .sort()
+          .forEach((v) => {
+            const o = document.createElement("option");
+            o.value = v;
+            o.textContent = v;
+            filterManual.appendChild(o);
+          });
+        [...uniqPred]
+          .filter(Boolean)
+          .sort()
+          .forEach((v) => {
+            const o = document.createElement("option");
+            o.value = v;
+            o.textContent = v;
+            filterPred.appendChild(o);
+          });
+
+        // events
+        document
+          .getElementById("search")
+          .addEventListener("input", () => applyFilters());
+        filterManual.addEventListener("change", () => applyFilters());
+        filterPred.addEventListener("change", () => applyFilters());
+
+        document
+          .getElementById("btnPrev")
+          .addEventListener("click", () => nextItem(-1));
+        document
+          .getElementById("btnNext")
+          .addEventListener("click", () => nextItem(+1));
+        document
+          .getElementById("btnJumpUnchanged")
+          .addEventListener("click", () => jumpNextChanged());
+
+        document
+          .getElementById("btnClear")
+          .addEventListener("click", () => clearLabel());
+        document
+          .getElementById("btnCopyPred")
+          .addEventListener("click", () => setManualPred());
+        document
+          .getElementById("btnZoom")
+          .addEventListener("click", () => openZoom());
+
+        document
+          .getElementById("btnDownload")
+          .addEventListener("click", () => downloadCsv());
+        document
+          .getElementById("btnSave")
+          .addEventListener("click", async () => {
+            try {
+              await saveToServer();
+            } catch (e) {
+              alert(`Save failed: ${e}`);
+            }
+          });
+
+        document
+          .getElementById("bigimg")
+          .addEventListener("click", () => openZoom());
+
+        // modal close
+        document
+          .getElementById("modalClose")
+          .addEventListener("click", () => closeZoom());
+        document
+          .getElementById("modalImg")
+          .addEventListener("click", () => closeZoom());
+        document.getElementById("modal").addEventListener("click", (ev) => {
+          if (ev.target.id === "modal") closeZoom();
+        });
+
+        // keyboard
+        window.addEventListener("keydown", async (ev) => {
+          // don’t hijack typing
+          const tag =
+            ev.target && ev.target.tagName
+              ? ev.target.tagName.toLowerCase()
+              : "";
+          if (tag === "input" || tag === "select" || tag === "textarea") return;
+
+          if (ev.key === "ArrowLeft") {
+            ev.preventDefault();
+            nextItem(-1);
+          } else if (ev.key === "ArrowRight") {
+            ev.preventDefault();
+            nextItem(+1);
+          } else if (ev.key === "0") {
+            ev.preventDefault();
+            clearLabel();
+          } else if (/^[1-9]$/.test(ev.key)) {
+            ev.preventDefault();
+            setLabelByIndex(Number(ev.key));
+          } else if (ev.key === "s" || ev.key === "S") {
+            ev.preventDefault();
+            try {
+              await saveToServer();
+            } catch (e) {
+              alert(`Save failed: ${e}`);
+            }
+          } else if (ev.key === "Escape") {
+            closeZoom();
           }
         });
+
+        renderAll();
       }
 
-      STATE.filtered = data;
-      renderTable();
-    }
-
-    function renderTable() {
-      const tbody = document.getElementById("rows");
-      tbody.innerHTML = "";
-
-      for (const row of STATE.filtered) {
-        const src = row.file.startsWith("./") ? row.file : `./${row.file}`;
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td><img class="thumb" src="${src}" onerror="this.replaceWith(document.createTextNode('${row.file}'))"></td>
-            <td>${row.top_label}</td>
-            <td class="prob">${row.top_prob.toFixed(4)}</td>
-            <td class="prob">${row.probs_html}</td>
-          `;
-        tbody.appendChild(tr);
-      }
-
-      const countInfo = document.getElementById("countInfo");
-      countInfo.textContent = `Показано ${STATE.filtered.length} из ${STATE.rows.length}`;
-
-      // обновим классы у th
-      const ths = document.querySelectorAll("#reportTable thead th");
-      ths.forEach((th) => {
-        th.classList.remove("sort-asc", "sort-desc");
-        const col = th.dataset.col;
-        if (col && col === STATE.sort.col) {
-          th.classList.add(
-            STATE.sort.dir === "asc" ? "sort-asc" : "sort-desc",
-          );
-        }
-      });
-    }
-
-    main();
-  </script>
-</body>
-
+      main();
+    </script>
+  </body>
 </html>

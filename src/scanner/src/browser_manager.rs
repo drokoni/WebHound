@@ -172,4 +172,3 @@ fn which(prog: &str) -> Option<PathBuf> {
     }
     None
 }
-

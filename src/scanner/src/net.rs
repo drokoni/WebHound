@@ -18,14 +18,14 @@ fn normalize_host(input: &str) -> String {
 /// Настройки доменного CDX (url=HOST/*)
 #[derive(Clone, Debug)]
 pub struct CdxDomainOpts {
-    pub match_type: String,           // "domain" по умолчанию
-    pub collapse_urlkey: bool,        // collapse=urlkey
-    pub limit: Option<u32>,           // limit=...
-    pub filter_status_200: bool,      // filter=statuscode:200
-    pub filter_mimetype_html: bool,   // filter=mimetype:text/html
+    pub match_type: String,         // "domain" по умолчанию
+    pub collapse_urlkey: bool,      // collapse=urlkey
+    pub limit: Option<u32>,         // limit=...
+    pub filter_status_200: bool,    // filter=statuscode:200
+    pub filter_mimetype_html: bool, // filter=mimetype:text/html
 
-    pub timeout: Duration,            // таймаут на один HTTP запрос
-    pub retries: u32,                 // кол-во ретраев на 429/5xx/сетевые
+    pub timeout: Duration, // таймаут на один HTTP запрос
+    pub retries: u32,      // кол-во ретраев на 429/5xx/сетевые
 
     /// fallback по годам (если доменный CDX валится)
     pub fallback_year_from: u16,
@@ -79,7 +79,11 @@ async fn get_text_with_retry(
     loop {
         attempt += 1;
 
-        let resp = timeout(Duration::from_secs(60), client.get(url.clone()).header("User-Agent", ua).send()).await;
+        let resp = timeout(
+            Duration::from_secs(60),
+            client.get(url.clone()).header("User-Agent", ua).send(),
+        )
+        .await;
 
         match resp {
             Ok(Ok(r)) => {
@@ -92,7 +96,8 @@ async fn get_text_with_retry(
                 // retry на 429/5xx
                 if is_retryable_status(st) && attempt <= retries + 1 {
                     // base backoff: 500ms * 2^(attempt-1), clamp
-                    let mut delay_ms = 500u64.saturating_mul(1u64 << (attempt.saturating_sub(1).min(6)));
+                    let mut delay_ms =
+                        500u64.saturating_mul(1u64 << (attempt.saturating_sub(1).min(6)));
                     delay_ms = delay_ms.min(8_000);
 
                     // respect Retry-After
@@ -114,7 +119,8 @@ async fn get_text_with_retry(
             Ok(Err(e)) => {
                 // сетевые ошибки — retry
                 if attempt <= retries + 1 {
-                    let mut delay_ms = 500u64.saturating_mul(1u64 << (attempt.saturating_sub(1).min(6)));
+                    let mut delay_ms =
+                        500u64.saturating_mul(1u64 << (attempt.saturating_sub(1).min(6)));
                     delay_ms = delay_ms.min(8_000);
                     let jitter: u64 = thread_rng().gen_range(0..250);
                     sleep(Duration::from_millis(delay_ms + jitter)).await;
@@ -125,7 +131,8 @@ async fn get_text_with_retry(
             Err(_) => {
                 // timeout(...) завершился по таймауту — retry
                 if attempt <= retries + 1 {
-                    let mut delay_ms = 500u64.saturating_mul(1u64 << (attempt.saturating_sub(1).min(6)));
+                    let mut delay_ms =
+                        500u64.saturating_mul(1u64 << (attempt.saturating_sub(1).min(6)));
                     delay_ms = delay_ms.min(8_000);
                     let jitter: u64 = thread_rng().gen_range(0..250);
                     sleep(Duration::from_millis(delay_ms + jitter)).await;
@@ -137,7 +144,12 @@ async fn get_text_with_retry(
     }
 }
 
-fn build_cdx_domain_url(host: &str, opts: &CdxDomainOpts, from: Option<u16>, to: Option<u16>) -> AnyResult<Url> {
+fn build_cdx_domain_url(
+    host: &str,
+    opts: &CdxDomainOpts,
+    from: Option<u16>,
+    to: Option<u16>,
+) -> AnyResult<Url> {
     let mut u = Url::parse("https://web.archive.org/cdx/search/cdx")?;
 
     // базовые поля
@@ -187,7 +199,11 @@ pub async fn fetch_wayback_urls(client: &Client, domain: &str) -> AnyResult<Stri
 }
 
 /// То же, но “устойчиво”: если доменный CDX падает — режем по годам.
-pub async fn fetch_wayback_urls_resilient(client: &Client, domain: &str, mut opts: CdxDomainOpts) -> AnyResult<String> {
+pub async fn fetch_wayback_urls_resilient(
+    client: &Client,
+    domain: &str,
+    mut opts: CdxDomainOpts,
+) -> AnyResult<String> {
     let host = normalize_host(domain);
     let ua = "curl/8.4.0";
 
@@ -197,7 +213,10 @@ pub async fn fetch_wayback_urls_resilient(client: &Client, domain: &str, mut opt
         Ok(body) if !body.lines().all(|l| l.trim().is_empty()) => return Ok(body),
         Ok(_) | Err(_) => {
             if !opts.enable_year_fallback {
-                return Err(anyhow!("CDX failed and year fallback disabled for host={}", host));
+                return Err(anyhow!(
+                    "CDX failed and year fallback disabled for host={}",
+                    host
+                ));
             }
         }
     }
@@ -219,7 +238,11 @@ pub async fn fetch_wayback_urls_resilient(client: &Client, domain: &str, mut opt
     all.sort();
     all.dedup();
 
-    anyhow::ensure!(!all.is_empty(), "CDX year fallback returned 0 urls for host={}", host);
+    anyhow::ensure!(
+        !all.is_empty(),
+        "CDX year fallback returned 0 urls for host={}",
+        host
+    );
 
     Ok(all.join("\n"))
 }
@@ -277,4 +300,3 @@ pub async fn fetch_live_or_wayback(
     let data = resp.bytes().await?;
     Ok((data.to_vec(), archived, true))
 }
-

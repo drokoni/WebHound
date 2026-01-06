@@ -119,48 +119,14 @@ impl EyeballerRunner {
         Ok(files)
     }
 
-    /// Возвращает относительный путь "to" относительно "from".
-    /// Работает и когда from/to не вложены друг в друга (использует ..).
-    fn relpath(from: &Path, to: &Path) -> Result<PathBuf> {
-        // canonicalize требует существования; out_dir мы создаём заранее
-        let from_abs = from
-            .canonicalize()
-            .with_context(|| format!("canonicalize from: {}", from.display()))?;
-        let to_abs = to
-            .canonicalize()
-            .with_context(|| format!("canonicalize to: {}", to.display()))?;
-
-        let from_c: Vec<_> = from_abs.components().collect();
-        let to_c: Vec<_> = to_abs.components().collect();
-
-        let mut i = 0usize;
-        while i < from_c.len() && i < to_c.len() && from_c[i] == to_c[i] {
-            i += 1;
-        }
-
-        let mut rel = PathBuf::new();
-        // подняться из from до общего префикса
-        for _ in i..from_c.len() {
-            rel.push("..");
-        }
-        // спуститься до to
-        for c in &to_c[i..] {
-            rel.push(c.as_os_str());
-        }
-
-        // если тот же путь — пусть будет пустой (удобнее для join)
-        if rel.as_os_str().is_empty() {
-            Ok(PathBuf::new())
-        } else {
-            Ok(rel)
-        }
-    }
-
-    /// Прогон папки со скриншотами → CSV + HTML отчёт (без копирования скринов).
+    /// Прогон папки со скриншотами → predictions.csv + index.html
+    /// Дополнительно создаёт annotations.csv (если его ещё нет):
+    ///   file,manual_label
+    /// где manual_label по умолчанию = top_label (предсказание модели).
     ///
-    /// ВАЖНО:
-    /// - `out_dir` может быть, например, `images_dir/report`
-    /// - в CSV будет путь от `out_dir` до файла, чтобы HTML мог открыть картинку
+    /// Ожидаемый layout для режима без копирования картинок:
+    ///   images_dir = .../screens
+    ///   out_dir    = .../screens/report
     pub fn infer_to_csv_html(
         &self,
         images_dir: &Path,
@@ -170,15 +136,21 @@ impl EyeballerRunner {
     ) -> Result<(PathBuf, PathBuf)> {
         fs::create_dir_all(out_dir).with_context(|| format!("mkdir -p {}", out_dir.display()))?;
 
-        // префикс от папки отчёта до папки со скринами
-        // пример: out_dir=screens/report, images_dir=screens => prefix=".."
-        let prefix_to_images = Self::relpath(out_dir, images_dir)?;
+        // Для текущего режима сервера: он берёт файлы из parent(out_dir) как fallback.
+        if out_dir.parent() != Some(images_dir) {
+            return Err(anyhow!(
+                "Для режима без копирования ожидается out_dir = images_dir/report. \
+Передано: out_dir={}, images_dir={}",
+                out_dir.display(),
+                images_dir.display()
+            ));
+        }
 
         let csv_path = out_dir.join(csv_name);
         let mut w = Writer::from_path(&csv_path)
             .with_context(|| format!("open csv for write: {}", csv_path.display()))?;
 
-        // заголовок CSV
+        // Заголовок predictions.csv
         let mut header = vec!["file".into(), "top_label".into(), "top_prob".into()];
         for l in &self.labels.0 {
             header.push(format!("p_{}", l));
@@ -188,12 +160,15 @@ impl EyeballerRunner {
         let files = self.collect_images(images_dir)?;
         let ncls = self.labels.0.len();
 
+        // Стартовая разметка: file -> predicted label
+        let mut initial_ann: Vec<(String, String)> = Vec::with_capacity(files.len());
+
         for p in files {
             let img = image::open(&p).with_context(|| format!("open image: {}", p.display()))?;
             let img = img.resize_exact(INPUT_W as u32, INPUT_H as u32, FilterType::Triangle);
             let rgb = img.to_rgb8();
 
-            // HWC float32 [0..1]
+            // HWC float32
             let mut hwc = Array3::<f32>::zeros((INPUT_H, INPUT_W, 3));
             for (y, x, px) in rgb.enumerate_pixels() {
                 let [r, g, b] = px.0;
@@ -202,16 +177,16 @@ impl EyeballerRunner {
                 hwc[(y as usize, x as usize, 2)] = b as f32 / 255.0;
             }
 
-            // NHWC -> (1, H, W, C)
+            // NHWC -> (1,H,W,C)
             let nhwc: Array4<f32> = hwc.insert_axis(Axis(0));
             let input_dyn = nhwc.into_dyn();
-
             let input_cow: CowArray<f32, IxDyn> = CowArray::from(input_dyn.view());
             let input_tensor = Value::from_array(self.session.allocator(), &input_cow)?;
 
             let outputs = self.session.run(vec![input_tensor])?;
             let out = outputs[0].try_extract::<f32>()?;
 
+            // FIX E0507
             let out_view = out.view();
             let out2: ArrayView2<f32> = out_view
                 .clone()
@@ -232,36 +207,44 @@ impl EyeballerRunner {
                 }
             }
 
-            // Путь в CSV: относительный от out_dir до файла
-            //   rel_in_images: sub/a.png
-            //   prefix_to_images: ..
-            //   итог: ../sub/a.png
-            let rel_in_images = p.strip_prefix(images_dir).unwrap_or(&p);
-            let rel_for_html = if prefix_to_images.as_os_str().is_empty() {
-                rel_in_images.to_path_buf()
-            } else {
-                prefix_to_images.join(rel_in_images)
-            };
-            let rel_str = rel_for_html.to_string_lossy().replace('\\', "/");
+            let top_label = self
+                .labels
+                .0
+                .get(top_i)
+                .cloned()
+                .unwrap_or_else(|| top_i.to_string());
 
-            let mut row = vec![
-                rel_str,
-                self.labels
-                    .0
-                    .get(top_i)
-                    .cloned()
-                    .unwrap_or_else(|| top_i.to_string()),
-                format!("{:.6}", top_p),
-            ];
+            // В CSV кладём путь относительно images_dir (без ../),
+            // чтобы браузер запрашивал "/file.png".
+            let rel_in_images = p.strip_prefix(images_dir).unwrap_or(&p);
+            let rel_str = rel_in_images.to_string_lossy().replace('\\', "/");
+
+            // predictions row
+            let mut row = vec![rel_str.clone(), top_label.clone(), format!("{:.6}", top_p)];
             for j in 0..ncls {
                 row.push(format!("{:.6}", probs[j]));
             }
             w.write_record(&row)?;
+
+            // initial annotation
+            initial_ann.push((rel_str, top_label));
         }
 
         w.flush()?;
 
-        // index.html в out_dir, но в нём будет отображаться images_dir (инфо)
+        // annotations.csv — создаём только если его ещё нет (чтобы не затирать твою ручную разметку)
+        let ann_path = out_dir.join("annotations.csv");
+        if !ann_path.is_file() {
+            let mut aw = Writer::from_path(&ann_path).with_context(|| {
+                format!("open annotations csv for write: {}", ann_path.display())
+            })?;
+            aw.write_record(&["file", "manual_label"])?;
+            for (f, lbl) in initial_ann {
+                aw.write_record(&[f, lbl])?;
+            }
+            aw.flush()?;
+        }
+
         let html_path = write_prediction_report_html(
             out_dir,
             csv_name,
