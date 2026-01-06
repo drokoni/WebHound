@@ -9,7 +9,7 @@
       :root {
         --bg: #0b0f14;
         --panel: #0f1621;
-        --panel2: #101a28;
+        --panel2: #111b2a;
         --text: #e7eef9;
         --muted: #a8b3c5;
         --line: rgba(255, 255, 255, 0.08);
@@ -17,9 +17,9 @@
         --good: #38d996;
         --warn: #ffcc66;
         --bad: #ff6b6b;
-        --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
         --r: 16px;
         --r2: 22px;
+        --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
         --mono:
           ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
           "Liberation Mono", "Courier New", monospace;
@@ -30,7 +30,7 @@
         :root {
           --bg: #f6f7fb;
           --panel: #ffffff;
-          --panel2: #f6f8ff;
+          --panel2: #f7f9ff;
           --text: #101828;
           --muted: #667085;
           --line: rgba(16, 24, 40, 0.12);
@@ -50,6 +50,7 @@
       body {
         margin: 0;
         font-family: var(--sans);
+        color: var(--text);
         background:
           radial-gradient(
             1200px 800px at 15% -10%,
@@ -62,7 +63,6 @@
             transparent 55%
           ),
           var(--bg);
-        color: var(--text);
       }
 
       a {
@@ -74,19 +74,19 @@
         text-decoration: underline;
       }
 
+      /* Layout: viewer on top, list below */
       .app {
-        display: grid;
-        grid-template-columns: 360px 1fr;
+        display: flex;
+        flex-direction: column;
         gap: 14px;
         padding: 14px;
-        height: 100vh;
       }
 
-      @media (max-width: 980px) {
-        .app {
-          grid-template-columns: 1fr;
-          height: auto;
-        }
+      /* верхний блок всегда виден, а низ просто идет ниже */
+      #viewerCard {
+        position: sticky;
+        top: 14px;
+        z-index: 10;
       }
 
       .card {
@@ -99,31 +99,18 @@
         border: 1px solid var(--line);
         border-radius: var(--r2);
         box-shadow: var(--shadow);
-      }
-
-      .sidebar {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
         overflow: hidden;
+        min-height: 0;
       }
 
-      .topbar {
-        padding: 14px 14px 10px 14px;
+      .top {
+        padding: 14px;
         border-bottom: 1px solid var(--line);
       }
 
-      .title {
-        display: flex;
-        justify-content: space-between;
-        gap: 10px;
-        align-items: flex-start;
-      }
-
-      .title h1 {
+      h1 {
         margin: 0;
         font-size: 18px;
-        line-height: 1.2;
         letter-spacing: 0.2px;
       }
 
@@ -131,6 +118,7 @@
         margin-top: 8px;
         font-size: 12px;
         color: var(--muted);
+        line-height: 1.5;
       }
 
       .meta code {
@@ -150,10 +138,10 @@
       }
 
       .controls .row {
-        grid-column: 1 / -1;
+        grid-column: 1/-1;
         display: flex;
         gap: 10px;
-        align-items: center;
+        flex-wrap: wrap;
       }
 
       input,
@@ -175,10 +163,6 @@
       button {
         cursor: pointer;
         user-select: none;
-        transition:
-          transform 0.06s ease,
-          background 0.15s ease,
-          border-color 0.15s ease;
         background: rgba(106, 169, 255, 0.1);
         border-color: rgba(106, 169, 255, 0.25);
       }
@@ -187,22 +171,9 @@
         background: rgba(106, 169, 255, 0.16);
       }
 
-      button:active {
-        transform: translateY(1px);
-      }
-
       .btn-ghost {
         background: rgba(255, 255, 255, 0.03);
         border-color: var(--line);
-      }
-
-      .btn-danger {
-        background: rgba(255, 107, 107, 0.12);
-        border-color: rgba(255, 107, 107, 0.28);
-      }
-
-      .btn-danger:hover {
-        background: rgba(255, 107, 107, 0.18);
       }
 
       .btn-good {
@@ -214,14 +185,21 @@
         background: rgba(56, 217, 150, 0.18);
       }
 
-      .status {
+      .btn-danger {
+        background: rgba(255, 107, 107, 0.12);
+        border-color: rgba(255, 107, 107, 0.28);
+      }
+
+      .btn-danger:hover {
+        background: rgba(255, 107, 107, 0.18);
+      }
+
+      .pillrow {
         margin-top: 10px;
-        font-size: 12px;
-        color: var(--muted);
         display: flex;
         gap: 10px;
-        align-items: center;
         flex-wrap: wrap;
+        align-items: center;
       }
 
       .pill {
@@ -246,125 +224,41 @@
         background: rgba(255, 204, 102, 0.08);
       }
 
-      .progress {
-        height: 10px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        overflow: hidden;
-        width: 100%;
-        margin-top: 10px;
-      }
-
-      .progress > div {
-        height: 100%;
-        width: 0%;
-        background: linear-gradient(
-          90deg,
-          rgba(106, 169, 255, 0.9),
-          rgba(56, 217, 150, 0.9)
-        );
-      }
-
-      .list {
-        padding: 10px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        overflow: auto;
-        min-height: 0;
-      }
-
-      .item {
-        display: grid;
-        grid-template-columns: 86px 1fr;
-        gap: 10px;
-        padding: 10px;
-        border-radius: var(--r);
-        border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.02);
-        cursor: pointer;
-        transition:
-          background 0.15s ease,
-          border-color 0.15s ease;
-      }
-
-      .item:hover {
-        background: rgba(255, 255, 255, 0.04);
-        border-color: rgba(106, 169, 255, 0.22);
-      }
-
-      .item.active {
-        background: rgba(106, 169, 255, 0.1);
-        border-color: rgba(106, 169, 255, 0.35);
-      }
-
-      .thumb {
-        width: 86px;
-        height: 54px;
-        border-radius: 12px;
-        object-fit: cover;
-        border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.02);
-      }
-
-      .item .name {
+      .kbd {
         font-family: var(--mono);
-        font-size: 12px;
-        line-height: 1.3;
-        color: var(--text);
-        word-break: break-all;
-      }
-
-      .badges {
-        margin-top: 6px;
-        display: flex;
-        gap: 6px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-
-      .badge {
         font-size: 11px;
-        padding: 2px 8px;
-        border-radius: 999px;
+        padding: 2px 6px;
+        border-radius: 8px;
         border: 1px solid var(--line);
         background: rgba(255, 255, 255, 0.03);
         color: var(--muted);
-        white-space: nowrap;
       }
 
-      .badge.pred {
-        border-color: rgba(106, 169, 255, 0.24);
-        background: rgba(106, 169, 255, 0.08);
-        color: var(--accent);
+      /* Viewer */
+      .head {
+        padding: 14px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        gap: 10px;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
       }
 
-      .badge.manual {
-        border-color: rgba(56, 217, 150, 0.24);
-        background: rgba(56, 217, 150, 0.08);
-        color: var(--good);
-      }
-
-      .badge.changed {
-        border-color: rgba(255, 204, 102, 0.25);
-        background: rgba(255, 204, 102, 0.08);
-        color: var(--warn);
-      }
-
-      .main {
-        display: grid;
-        grid-template-rows: auto 1fr;
-        gap: 14px;
-        min-height: 0;
+      .fileInfo {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+        word-break: break-all;
+        max-width: 90ch;
       }
 
       .viewer {
+        padding: 14px;
         display: grid;
-        grid-template-columns: 1fr 360px;
+        grid-template-columns: 1fr 380px;
         gap: 14px;
         min-height: 0;
-        overflow: hidden;
       }
 
       @media (max-width: 980px) {
@@ -373,57 +267,16 @@
         }
       }
 
-      .panel {
-        padding: 14px;
-      }
-
-      .viewerTop {
-        display: flex;
-        justify-content: space-between;
-        gap: 10px;
-        align-items: center;
-        padding: 14px;
-        border-bottom: 1px solid var(--line);
-      }
-
-      .viewerTop .nav {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        flex-wrap: wrap;
-      }
-
-      .viewerTop .nav button {
-        padding: 10px 12px;
-        border-radius: 12px;
-      }
-
-      .viewerTop .file {
-        font-family: var(--mono);
-        font-size: 12px;
-        color: var(--muted);
-        word-break: break-all;
-        max-width: min(900px, 75vw);
-      }
-
       .imgWrap {
-        height: calc(100vh - 14px - 14px - 14px - 62px);
-        /* app padding + gaps + topbar approx */
-        min-height: 360px;
-        overflow: hidden;
         border-radius: var(--r2);
         border: 1px solid var(--line);
         background: rgba(255, 255, 255, 0.02);
+        overflow: hidden;
+        min-height: 45vh;
         display: flex;
         align-items: center;
         justify-content: center;
         position: relative;
-      }
-
-      @media (max-width: 980px) {
-        .imgWrap {
-          height: 55vh;
-        }
       }
 
       .bigimg {
@@ -433,13 +286,13 @@
         cursor: zoom-in;
       }
 
-      .hint {
+      .imgHint {
         position: absolute;
         left: 12px;
         bottom: 12px;
         font-size: 12px;
         color: var(--muted);
-        background: rgba(0, 0, 0, 0.25);
+        background: rgba(0, 0, 0, 0.28);
         border: 1px solid rgba(255, 255, 255, 0.14);
         padding: 6px 10px;
         border-radius: 999px;
@@ -447,13 +300,13 @@
       }
 
       @media (prefers-color-scheme: light) {
-        .hint {
+        .imgHint {
           background: rgba(255, 255, 255, 0.55);
           border-color: rgba(16, 24, 40, 0.18);
         }
       }
 
-      .sideInfo .section {
+      .section {
         border: 1px solid var(--line);
         border-radius: var(--r2);
         background: rgba(255, 255, 255, 0.02);
@@ -461,20 +314,19 @@
         margin-bottom: 12px;
       }
 
-      .sideInfo h3 {
+      .section h3 {
         margin: 0 0 8px 0;
         font-size: 13px;
         color: var(--muted);
         font-weight: 600;
-        letter-spacing: 0.2px;
       }
 
       .kv {
         display: grid;
         grid-template-columns: 92px 1fr;
         gap: 8px;
-        font-size: 13px;
         align-items: center;
+        font-size: 13px;
       }
 
       .kv .k {
@@ -495,9 +347,13 @@
 
       .barrow {
         display: grid;
-        grid-template-columns: 1fr 54px;
+        grid-template-columns: 1fr 60px;
         gap: 10px;
         align-items: center;
+      }
+
+      .barrow .lbl {
+        font-family: var(--mono);
         font-size: 12px;
       }
 
@@ -507,6 +363,7 @@
         overflow: hidden;
         border: 1px solid var(--line);
         background: rgba(255, 255, 255, 0.04);
+        margin-top: 6px;
       }
 
       .bar > div {
@@ -519,34 +376,123 @@
         );
       }
 
-      .barrow .p {
+      .pct {
         font-family: var(--mono);
+        font-size: 12px;
         color: var(--muted);
         text-align: right;
       }
 
-      .footerHint {
-        font-size: 12px;
-        color: var(--muted);
-        line-height: 1.45;
+      /* List grid (instead of vertical list) */
+      .gridWrap {
+        display: block;
       }
 
-      .kbd {
+      .gridTop {
+        padding: 14px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .gridTitle {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .grid {
+        padding: 12px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+
+        overflow: visible;
+      }
+
+      .tile {
+        border: 1px solid var(--line);
+        border-radius: var(--r2);
+        background: rgba(255, 255, 255, 0.02);
+        overflow: hidden;
+        cursor: pointer;
+        transition:
+          transform 0.08s ease,
+          border-color 0.15s ease,
+          background 0.15s ease;
+      }
+
+      .tile:hover {
+        transform: translateY(-1px);
+        border-color: rgba(106, 169, 255, 0.22);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .tile.active {
+        border-color: rgba(106, 169, 255, 0.4);
+        background: rgba(106, 169, 255, 0.1);
+      }
+
+      .tileImg {
+        width: 100%;
+        height: 140px;
+        object-fit: cover;
+        display: block;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .tileBody {
+        padding: 10px;
+      }
+
+      .tileName {
         font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.3;
+        word-break: break-all;
+      }
+
+      .badges {
+        margin-top: 8px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .badge {
         font-size: 11px;
-        padding: 2px 6px;
-        border-radius: 8px;
+        padding: 2px 8px;
+        border-radius: 999px;
         border: 1px solid var(--line);
         background: rgba(255, 255, 255, 0.03);
         color: var(--muted);
-        white-space: nowrap;
       }
 
-      /* Modal */
+      .badge.pred {
+        border-color: rgba(106, 169, 255, 0.24);
+        background: rgba(106, 169, 255, 0.08);
+        color: var(--accent);
+      }
+
+      .badge.manual {
+        border-color: rgba(56, 217, 150, 0.24);
+        background: rgba(56, 217, 150, 0.08);
+        color: var(--good);
+      }
+
+      .badge.changed {
+        border-color: rgba(255, 204, 102, 0.25);
+        background: rgba(255, 204, 102, 0.08);
+        color: var(--warn);
+      }
+
+      /* Modal zoom */
       .modal {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.65);
+        background: rgba(0, 0, 0, 0.68);
         display: none;
         align-items: center;
         justify-content: center;
@@ -559,11 +505,11 @@
       }
 
       .modal .inner {
-        width: min(1280px, 100%);
-        height: min(860px, 100%);
+        width: min(1400px, 100%);
+        height: min(900px, 100%);
         border-radius: 22px;
         border: 1px solid rgba(255, 255, 255, 0.16);
-        background: rgba(10, 14, 20, 0.75);
+        background: rgba(10, 14, 20, 0.78);
         backdrop-filter: blur(10px);
         box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
         position: relative;
@@ -597,28 +543,24 @@
 
   <body>
     <div class="app">
-      <!-- SIDEBAR -->
-      <div class="sidebar card">
-        <div class="topbar">
-          <div class="title">
-            <h1>Eyeballer Labeler</h1>
-            <div class="pill" id="dirtyPill" style="display: none">unsaved</div>
-          </div>
-
+      <!-- TOP: Viewer -->
+      <div class="card" id="viewerCard">
+        <div class="top">
+          <h1>WebHound report</h1>
           <div class="meta">
             <div>Images: <code>{IMAGES_DIR}</code></div>
             <div style="margin-top: 6px">
-              Predictions: <a href="./{CSV_NAME}">{CSV_NAME}</a> &nbsp;·&nbsp;
-              Annotations: <a href="./annotations.csv">annotations.csv</a>
+              Predictions: <a href="./{CSV_NAME}">{CSV_NAME}</a> · Annotations:
+              <a href="./annotations.csv">annotations.csv</a>
             </div>
           </div>
 
           <div class="controls">
             <input
               id="search"
+              class="row"
               type="text"
               placeholder="Search filename…"
-              class="row"
             />
             <select id="filterManual">
               <option value="">manual: (all)</option>
@@ -628,102 +570,78 @@
             </select>
 
             <div class="row">
-              <button id="btnSave" class="btn-good">Save</button>
-              <button id="btnDownload" class="btn-ghost">Download</button>
-              <button id="btnClear" class="btn-danger">Clear label</button>
-            </div>
-          </div>
-
-          <div class="status">
-            <span class="pill" id="countPill">0/0</span>
-            <span class="pill" id="changedPill">changed: 0</span>
-            <span class="pill warn" id="hintPill">
-              keys: <span class="kbd">←</span><span class="kbd">→</span>,
-              <span class="kbd">1..9</span>, <span class="kbd">0</span>,
-              <span class="kbd">S</span>
-            </span>
-          </div>
-          <div class="progress">
-            <div id="progBar"></div>
-          </div>
-        </div>
-
-        <div class="list" id="list"></div>
-      </div>
-
-      <!-- MAIN -->
-      <div class="main">
-        <div class="card">
-          <div class="viewerTop">
-            <div class="nav">
               <button id="btnPrev" class="btn-ghost">← Prev</button>
               <button id="btnNext" class="btn-ghost">Next →</button>
-              <button id="btnJumpUnchanged" class="btn-ghost">
-                Next changed
-              </button>
-            </div>
-            <div class="file" id="fileInfo"></div>
-          </div>
-
-          <div class="viewer panel">
-            <div class="imgWrap" id="imgWrap">
-              <img id="bigimg" class="bigimg" alt="preview" />
-              <div class="hint">Click to zoom</div>
+              <button id="btnSave" class="btn-good">Save</button>
+              <button id="btnDownload" class="btn-ghost">Download</button>
+              <button id="btnSetPred" class="btn-ghost">manual = pred</button>
+              <button id="btnClear" class="btn-danger">Clear</button>
             </div>
 
-            <div class="sideInfo">
-              <div class="section">
-                <h3>Label</h3>
-                <div class="kv">
-                  <div class="k">Manual</div>
-                  <div class="v">
-                    <select
-                      id="manualSelect"
-                      style="width: 100%; padding: 10px; border-radius: 14px"
-                    ></select>
-                  </div>
-
-                  <div class="k">Pred</div>
-                  <div class="v" id="predLabel"></div>
-
-                  <div class="k">Prob</div>
-                  <div class="v" id="predProb"></div>
-                </div>
-                <div
-                  style="
-                    margin-top: 10px;
-                    display: flex;
-                    gap: 10px;
-                    flex-wrap: wrap;
-                  "
-                >
-                  <button id="btnCopyPred" class="btn-ghost">
-                    Set manual = pred
-                  </button>
-                  <button id="btnZoom" class="btn-ghost">Zoom</button>
-                </div>
-              </div>
-
-              <div class="section">
-                <h3>All probabilities</h3>
-                <div class="probs" id="probs"></div>
-              </div>
-
-              <div class="footerHint">
-                <div>
-                  <span class="kbd">1..9</span> set label (order of classes)
-                </div>
-                <div><span class="kbd">0</span> clear label</div>
-                <div><span class="kbd">S</span> save</div>
-                <div><span class="kbd">Esc</span> close zoom</div>
-              </div>
+            <div class="pillrow">
+              <span class="pill" id="countPill">0/0</span>
+              <span class="pill" id="changedPill">changed: 0</span>
+              <span class="pill warn">
+                keys: <span class="kbd">←</span><span class="kbd">→</span>
+                <span class="kbd">1..9</span> <span class="kbd">0</span>
+                <span class="kbd">S</span> <span class="kbd">Esc</span>
+              </span>
+              <span class="pill good" id="savedPill" style="display: none"
+                >saved</span
+              >
             </div>
           </div>
         </div>
+
+        <div class="head">
+          <div class="fileInfo" id="fileInfo"></div>
+        </div>
+
+        <div class="viewer">
+          <div class="imgWrap">
+            <img id="bigimg" class="bigimg" alt="preview" />
+            <div class="imgHint">Click to zoom</div>
+          </div>
+
+          <div>
+            <div class="section">
+              <h3>Label</h3>
+              <div class="kv">
+                <div class="k">Manual</div>
+                <div class="v">
+                  <select
+                    id="manualSelect"
+                    style="width: 100%; padding: 10px; border-radius: 14px"
+                  ></select>
+                </div>
+
+                <div class="k">Pred</div>
+                <div class="v" id="predLabel"></div>
+
+                <div class="k">Prob</div>
+                <div class="v" id="predProb"></div>
+              </div>
+            </div>
+
+            <div class="section">
+              <h3>All probabilities</h3>
+              <div class="probs" id="probs"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTTOM: Grid -->
+      <div class="card gridWrap" id="thumbsCard">
+        <div class="gridTop">
+          <div class="gridTitle">Thumbnails (click to open / select)</div>
+          <div class="pill">Tip: click any image to zoom</div>
+        </div>
+        <div class="grid" id="grid"></div>
       </div>
     </div>
 
-    <!-- MODAL -->
+    <!-- ZOOM MODAL -->
     <div class="modal" id="modal">
       <div class="inner">
         <button class="close" id="modalClose">Esc / click image</button>
@@ -732,14 +650,7 @@
     </div>
 
     <script>
-      const STATE = {
-        rows: [],
-        labels: [],
-        filteredIdx: [],
-        activeIdx: 0,
-        dirty: false,
-        sortKey: "file", // stable
-      };
+      const STATE = { rows: [], labels: [], filteredIdx: [], activeIdx: 0 };
 
       function parseCsvLine(line) {
         const out = [];
@@ -771,16 +682,7 @@
         return s;
       }
 
-      function setDirty(on) {
-        STATE.dirty = on;
-        document.getElementById("dirtyPill").style.display = on
-          ? "inline-block"
-          : "none";
-      }
-
       function encodeSrc(file) {
-        // важно: server отдаёт картинки из parent(out_dir),
-        // поэтому img src должен быть "./<file>"
         const s = file.startsWith("./") ? file : `./${file}`;
         return encodeURI(s);
       }
@@ -802,6 +704,15 @@
         return lines.join("\n") + "\n";
       }
 
+      function showSaved(msg) {
+        const el = document.getElementById("savedPill");
+        el.textContent = msg || "saved";
+        el.style.display = "inline-block";
+        setTimeout(() => {
+          el.style.display = "none";
+        }, 1200);
+      }
+
       async function saveToServer() {
         const csv = buildAnnotationsCsv();
         const r = await fetch("/api/annotations", {
@@ -810,7 +721,7 @@
           body: csv,
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        setDirty(false);
+        showSaved("saved");
       }
 
       function downloadCsv() {
@@ -822,6 +733,31 @@
         document.body.appendChild(a);
         a.click();
         a.remove();
+        showSaved("downloaded");
+      }
+
+      function renderStats() {
+        const total = STATE.rows.length;
+        const shown = STATE.filteredIdx.length;
+        let changed = 0;
+        for (const r of STATE.rows) {
+          const ml = r.manual_label || "";
+          if (ml !== "" && ml !== (r.top_label || "")) changed++;
+        }
+        document.getElementById("countPill").textContent = `${shown}/${total}`;
+        document.getElementById("changedPill").textContent =
+          `changed: ${changed}`;
+      }
+
+      function openZoomByFile(file) {
+        const modal = document.getElementById("modal");
+        const img = document.getElementById("modalImg");
+        img.src = encodeSrc(file);
+        modal.classList.add("open");
+      }
+
+      function closeZoom() {
+        document.getElementById("modal").classList.remove("open");
       }
 
       function applyFilters() {
@@ -838,43 +774,130 @@
           idx.push(i);
         }
         STATE.filteredIdx = idx;
-
-        // если текущий активный вылетел из фильтра — ставим первый
-        if (!idx.includes(STATE.activeIdx)) {
+        if (!idx.includes(STATE.activeIdx))
           STATE.activeIdx = idx.length ? idx[0] : 0;
-        }
-
         renderAll();
       }
 
-      function renderSidebar() {
-        const el = document.getElementById("list");
+      function renderViewer() {
+        const r = STATE.rows[STATE.activeIdx];
+        const fileInfo = document.getElementById("fileInfo");
+        const big = document.getElementById("bigimg");
+
+        if (!r) {
+          fileInfo.textContent = "(no items)";
+          big.removeAttribute("src");
+          return;
+        }
+
+        fileInfo.textContent = r.file;
+        big.src = encodeSrc(r.file);
+
+        document.getElementById("predLabel").textContent = String(r.top_label);
+        document.getElementById("predProb").textContent = Number(
+          r.top_prob,
+        ).toFixed(4);
+
+        // manual select
+        const sel = document.getElementById("manualSelect");
+        sel.innerHTML = "";
+        const opt0 = document.createElement("option");
+        opt0.value = "";
+        opt0.textContent = "(empty)";
+        sel.appendChild(opt0);
+
+        for (const lbl of STATE.labels) {
+          const opt = document.createElement("option");
+          opt.value = lbl;
+          opt.textContent = lbl;
+          sel.appendChild(opt);
+        }
+        if (
+          r.manual_label &&
+          r.manual_label !== "" &&
+          !STATE.labels.includes(r.manual_label)
+        ) {
+          const opt = document.createElement("option");
+          opt.value = r.manual_label;
+          opt.textContent = r.manual_label;
+          sel.appendChild(opt);
+        }
+
+        sel.value = r.manual_label || "";
+        sel.onchange = () => {
+          r.manual_label = sel.value;
+          renderAll(false);
+        };
+
+        // probs
+        const probsEl = document.getElementById("probs");
+        probsEl.innerHTML = "";
+        const frag = document.createDocumentFragment();
+
+        for (const p of r.probs) {
+          const row = document.createElement("div");
+          row.className = "barrow";
+
+          const left = document.createElement("div");
+          const lbl = document.createElement("div");
+          lbl.className = "lbl";
+          lbl.textContent = p.label;
+
+          const bar = document.createElement("div");
+          bar.className = "bar";
+          const fill = document.createElement("div");
+          fill.style.width = `${Math.max(0, Math.min(1, p.value)) * 100}%`;
+          bar.appendChild(fill);
+
+          left.appendChild(lbl);
+          left.appendChild(bar);
+
+          const pct = document.createElement("div");
+          pct.className = "pct";
+          pct.textContent = p.value.toFixed(4);
+
+          row.appendChild(left);
+          row.appendChild(pct);
+          frag.appendChild(row);
+        }
+        probsEl.appendChild(frag);
+      }
+
+      function renderGrid() {
+        const el = document.getElementById("grid");
         el.innerHTML = "";
         const frag = document.createDocumentFragment();
 
         for (const i of STATE.filteredIdx) {
           const r = STATE.rows[i];
-          const div = document.createElement("div");
-          div.className = "item" + (i === STATE.activeIdx ? " active" : "");
-          div.addEventListener("click", () => {
+
+          const tile = document.createElement("div");
+          tile.className = "tile" + (i === STATE.activeIdx ? " active" : "");
+          tile.onclick = () => {
             STATE.activeIdx = i;
             renderAll();
-          });
+          };
 
           const img = document.createElement("img");
-          img.className = "thumb";
+          img.className = "tileImg";
           img.src = encodeSrc(r.file);
-          img.onerror = () => {
-            img.style.display = "none";
-          };
-          div.appendChild(img);
+          img.alt = r.file;
 
-          const right = document.createElement("div");
+          // ANY image click => zoom (stop to prevent selecting only)
+          img.onclick = (ev) => {
+            ev.stopPropagation();
+            openZoomByFile(r.file);
+          };
+
+          tile.appendChild(img);
+
+          const body = document.createElement("div");
+          body.className = "tileBody";
 
           const name = document.createElement("div");
-          name.className = "name";
+          name.className = "tileName";
           name.textContent = r.file;
-          right.appendChild(name);
+          body.appendChild(name);
 
           const badges = document.createElement("div");
           badges.className = "badges";
@@ -897,141 +920,27 @@
             badges.appendChild(bCh);
           }
 
-          right.appendChild(badges);
-          div.appendChild(right);
+          body.appendChild(badges);
+          tile.appendChild(body);
 
-          frag.appendChild(div);
+          frag.appendChild(tile);
         }
 
         el.appendChild(frag);
       }
 
-      function renderViewer() {
-        const r = STATE.rows[STATE.activeIdx];
-        const fileInfo = document.getElementById("fileInfo");
-        fileInfo.textContent = r ? r.file : "(no items)";
-
-        const big = document.getElementById("bigimg");
-        if (!r) {
-          big.removeAttribute("src");
-          return;
-        }
-        big.src = encodeSrc(r.file);
-
-        document.getElementById("predLabel").textContent = String(r.top_label);
-        document.getElementById("predProb").textContent = Number(
-          r.top_prob,
-        ).toFixed(4);
-
-        // manual select
-        const sel = document.getElementById("manualSelect");
-        sel.innerHTML = "";
-        // option empty
-        const opt0 = document.createElement("option");
-        opt0.value = "";
-        opt0.textContent = "(empty)";
-        sel.appendChild(opt0);
-
-        for (const lbl of STATE.labels) {
-          const opt = document.createElement("option");
-          opt.value = lbl;
-          opt.textContent = lbl;
-          sel.appendChild(opt);
-        }
-
-        // если в annotations есть неизвестная метка — добавим
-        if (
-          r.manual_label &&
-          r.manual_label !== "" &&
-          !STATE.labels.includes(r.manual_label)
-        ) {
-          const opt = document.createElement("option");
-          opt.value = r.manual_label;
-          opt.textContent = r.manual_label;
-          sel.appendChild(opt);
-        }
-
-        sel.value = r.manual_label || "";
-        sel.onchange = () => {
-          r.manual_label = sel.value;
-          setDirty(true);
-          renderAll(false);
-        };
-
-        // probs
-        const probsEl = document.getElementById("probs");
-        probsEl.innerHTML = "";
-        const probs = r.probs || [];
-        const frag = document.createDocumentFragment();
-        for (const p of probs) {
-          const row = document.createElement("div");
-          row.className = "barrow";
-
-          const left = document.createElement("div");
-          left.style.display = "flex";
-          left.style.flexDirection = "column";
-          left.style.gap = "6px";
-
-          const label = document.createElement("div");
-          label.style.fontFamily = "var(--mono)";
-          label.style.fontSize = "12px";
-          label.textContent = p.label;
-
-          const bar = document.createElement("div");
-          bar.className = "bar";
-          const fill = document.createElement("div");
-          fill.style.width = `${Math.max(0, Math.min(1, p.value)) * 100}%`;
-          bar.appendChild(fill);
-
-          left.appendChild(label);
-          left.appendChild(bar);
-
-          const right = document.createElement("div");
-          right.className = "p";
-          right.textContent = p.value.toFixed(4);
-
-          row.appendChild(left);
-          row.appendChild(right);
-
-          frag.appendChild(row);
-        }
-        probsEl.appendChild(frag);
-      }
-
-      function renderStats() {
-        const total = STATE.rows.length;
-        const shown = STATE.filteredIdx.length;
-
-        let changed = 0;
-        for (const r of STATE.rows) {
-          const ml = r.manual_label || "";
-          if (ml !== "" && ml !== (r.top_label || "")) changed++;
-        }
-
-        document.getElementById("countPill").textContent = `${shown}/${total}`;
-        document.getElementById("changedPill").textContent =
-          `changed: ${changed}`;
-
-        // progress bar: сколько НЕ empty manual_label
-        let labeled = 0;
-        for (const r of STATE.rows)
-          if ((r.manual_label || "") !== "") labeled++;
-        const pct = total ? (labeled / total) * 100 : 0;
-        document.getElementById("progBar").style.width = `${pct}%`;
-      }
-
-      function renderAll(scrollSidebar = true) {
+      function renderAll(scrollGrid = true) {
         renderStats();
-        renderSidebar();
         renderViewer();
+        renderGrid();
 
-        if (scrollSidebar) {
-          const list = document.getElementById("list");
-          const active = list.querySelector(".item.active");
+        if (scrollGrid) {
+          const grid = document.getElementById("grid");
+          const active = grid.querySelector(".tile.active");
           if (active) {
             const r = active.getBoundingClientRect();
-            const lr = list.getBoundingClientRect();
-            if (r.top < lr.top || r.bottom > lr.bottom)
+            const gr = grid.getBoundingClientRect();
+            if (r.top < gr.top || r.bottom > gr.bottom)
               active.scrollIntoView({ block: "center" });
           }
         }
@@ -1040,31 +949,24 @@
       function nextItem(dir) {
         const idx = STATE.filteredIdx;
         if (!idx.length) return;
-
         const pos = idx.indexOf(STATE.activeIdx);
         const nextPos = pos === -1 ? 0 : (pos + dir + idx.length) % idx.length;
-
         STATE.activeIdx = idx[nextPos];
         renderAll();
       }
 
-      function jumpNextChanged() {
-        const idx = STATE.filteredIdx;
-        if (!idx.length) return;
+      function setManualPred() {
+        const r = STATE.rows[STATE.activeIdx];
+        if (!r) return;
+        r.manual_label = r.top_label || "";
+        renderAll(false);
+      }
 
-        const startPos = idx.indexOf(STATE.activeIdx);
-        const start = startPos === -1 ? 0 : startPos;
-
-        for (let step = 1; step <= idx.length; step++) {
-          const i = idx[(start + step) % idx.length];
-          const r = STATE.rows[i];
-          const ml = r.manual_label || "";
-          if (ml !== "" && ml !== (r.top_label || "")) {
-            STATE.activeIdx = i;
-            renderAll();
-            return;
-          }
-        }
+      function clearLabel() {
+        const r = STATE.rows[STATE.activeIdx];
+        if (!r) return;
+        r.manual_label = "";
+        renderAll(false);
       }
 
       function setLabelByIndex(oneBased) {
@@ -1073,37 +975,7 @@
         const i = oneBased - 1;
         if (i < 0 || i >= STATE.labels.length) return;
         r.manual_label = STATE.labels[i];
-        setDirty(true);
         renderAll(false);
-      }
-
-      function clearLabel() {
-        const r = STATE.rows[STATE.activeIdx];
-        if (!r) return;
-        r.manual_label = "";
-        setDirty(true);
-        renderAll(false);
-      }
-
-      function setManualPred() {
-        const r = STATE.rows[STATE.activeIdx];
-        if (!r) return;
-        r.manual_label = r.top_label || "";
-        setDirty(true);
-        renderAll(false);
-      }
-
-      function openZoom() {
-        const r = STATE.rows[STATE.activeIdx];
-        if (!r) return;
-        const modal = document.getElementById("modal");
-        const img = document.getElementById("modalImg");
-        img.src = encodeSrc(r.file);
-        modal.classList.add("open");
-      }
-
-      function closeZoom() {
-        document.getElementById("modal").classList.remove("open");
       }
 
       async function main() {
@@ -1111,16 +983,15 @@
         const predText = await fetch(csvName).then((r) => r.text());
 
         const lines = predText.trim().split(/\r?\n/);
-        const head = parseCsvLine(lines.shift());
+        const head = parseCsvLine(lines.shift() || "");
         const idx = Object.fromEntries(head.map((h, i) => [h, i]));
 
-        // labels from p_*
         const labels = head
           .filter((h) => h.startsWith("p_"))
           .map((h) => h.slice(2));
         STATE.labels = labels;
 
-        // load annotations if exists
+        // annotations
         const annText = await fetchTextIfExists("annotations.csv");
         const annMap = new Map();
         if (annText) {
@@ -1136,11 +1007,12 @@
           }
         }
 
-        // parse predictions
+        // rows
         const rows = [];
         for (const line of lines) {
           if (!line.trim()) continue;
           const c = parseCsvLine(line);
+
           const file = c[idx["file"]];
           const topLabel = c[idx["top_label"]];
           const topProb = Number(c[idx["top_prob"]]) || 0;
@@ -1152,11 +1024,9 @@
             const v = Number(c[idx[h]]) || 0;
             probs.push({ label: lbl, value: v });
           }
-          // sort probs desc for display
           probs.sort((a, b) => b.value - a.value);
 
           const manual = annMap.has(file) ? annMap.get(file) : topLabel || "";
-
           rows.push({
             file,
             top_label: topLabel,
@@ -1170,14 +1040,13 @@
         STATE.filteredIdx = rows.map((_, i) => i);
         STATE.activeIdx = STATE.filteredIdx.length ? STATE.filteredIdx[0] : 0;
 
-        // fill filter selects
+        // fill filters
         const filterManual = document.getElementById("filterManual");
         const filterPred = document.getElementById("filterPred");
-
-        const uniqManual = new Set(rows.map((r) => r.manual_label || ""));
+        const uniqMan = new Set(rows.map((r) => r.manual_label || ""));
         const uniqPred = new Set(rows.map((r) => r.top_label || ""));
 
-        [...uniqManual]
+        [...uniqMan]
           .filter(Boolean)
           .sort()
           .forEach((v) => {
@@ -1199,61 +1068,39 @@
         // events
         document
           .getElementById("search")
-          .addEventListener("input", () => applyFilters());
-        filterManual.addEventListener("change", () => applyFilters());
-        filterPred.addEventListener("change", () => applyFilters());
+          .addEventListener("input", applyFilters);
+        filterManual.addEventListener("change", applyFilters);
+        filterPred.addEventListener("change", applyFilters);
 
-        document
-          .getElementById("btnPrev")
-          .addEventListener("click", () => nextItem(-1));
-        document
-          .getElementById("btnNext")
-          .addEventListener("click", () => nextItem(+1));
-        document
-          .getElementById("btnJumpUnchanged")
-          .addEventListener("click", () => jumpNextChanged());
+        document.getElementById("btnPrev").onclick = () => nextItem(-1);
+        document.getElementById("btnNext").onclick = () => nextItem(+1);
 
-        document
-          .getElementById("btnClear")
-          .addEventListener("click", () => clearLabel());
-        document
-          .getElementById("btnCopyPred")
-          .addEventListener("click", () => setManualPred());
-        document
-          .getElementById("btnZoom")
-          .addEventListener("click", () => openZoom());
+        document.getElementById("btnClear").onclick = () => clearLabel();
+        document.getElementById("btnSetPred").onclick = () => setManualPred();
+        document.getElementById("btnDownload").onclick = () => downloadCsv();
+        document.getElementById("btnSave").onclick = async () => {
+          try {
+            await saveToServer();
+          } catch (e) {
+            alert(`Save failed: ${e}`);
+          }
+        };
 
-        document
-          .getElementById("btnDownload")
-          .addEventListener("click", () => downloadCsv());
-        document
-          .getElementById("btnSave")
-          .addEventListener("click", async () => {
-            try {
-              await saveToServer();
-            } catch (e) {
-              alert(`Save failed: ${e}`);
-            }
-          });
-
-        document
-          .getElementById("bigimg")
-          .addEventListener("click", () => openZoom());
+        // viewer image click => zoom
+        document.getElementById("bigimg").onclick = () => {
+          const r = STATE.rows[STATE.activeIdx];
+          if (r) openZoomByFile(r.file);
+        };
 
         // modal close
-        document
-          .getElementById("modalClose")
-          .addEventListener("click", () => closeZoom());
-        document
-          .getElementById("modalImg")
-          .addEventListener("click", () => closeZoom());
-        document.getElementById("modal").addEventListener("click", (ev) => {
+        document.getElementById("modalClose").onclick = closeZoom;
+        document.getElementById("modalImg").onclick = closeZoom;
+        document.getElementById("modal").onclick = (ev) => {
           if (ev.target.id === "modal") closeZoom();
-        });
+        };
 
-        // keyboard
+        // hotkeys
         window.addEventListener("keydown", async (ev) => {
-          // don’t hijack typing
           const tag =
             ev.target && ev.target.tagName
               ? ev.target.tagName.toLowerCase()
