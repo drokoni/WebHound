@@ -570,7 +570,6 @@
           </div>
 
           <div class="pillrow">
-            <!-- now shows current/shown -->
             <span class="pill" id="countPill">0/0</span>
             <span class="pill" id="shownPill">shown: 0/0</span>
             <span class="pill" id="changedPill">changed: 0</span>
@@ -622,7 +621,7 @@
         <div class="gridTitle">
           Thumbnails (click to select · click image to zoom)
         </div>
-        <div class="pill">multi-label saved as one-hot TRUE/FALSE</div>
+        <div class="pill">auto-scroll only if grid visible</div>
       </div>
       <div class="grid" id="grid"></div>
     </div>
@@ -689,7 +688,6 @@
     }
 
     function buildAnnotationsCsv() {
-      // one-hot multi-label
       const lines = [];
       lines.push(["filename", ...STATE.labels].map(csvEsc).join(","));
 
@@ -746,6 +744,15 @@
       return set.has(label);
     }
 
+    // Variant 3: grid autoscroll only if thumbsCard is visible in viewport
+    function isElementVisible(el, minVisiblePx = 80) {
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const visible = Math.min(r.bottom, vh) - Math.max(r.top, 0);
+      return visible >= minVisiblePx;
+    }
+
     function applyFilters() {
       const q = document.getElementById("search").value.trim().toLowerCase();
       const fMan = document.getElementById("filterManual").value;
@@ -781,7 +788,6 @@
       for (const r of STATE.rows) {
         const set = r.manual_set || new Set();
         const pred = r.top_label || "";
-        // changed if set is not exactly {pred}
         const isSame =
           (pred === "" && set.size === 0) ||
           (pred !== "" && set.size === 1 && set.has(pred));
@@ -810,7 +816,6 @@
         r.top_prob,
       ).toFixed(4);
 
-      // manual checkboxes
       const wrap = document.getElementById("manualChecks");
       wrap.innerHTML = "";
       if (!r.manual_set) r.manual_set = new Set();
@@ -837,7 +842,6 @@
         wrap.appendChild(lab);
       }
 
-      // probs
       const probsEl = document.getElementById("probs");
       probsEl.innerHTML = "";
       const frag = document.createDocumentFragment();
@@ -920,7 +924,6 @@
         bMan.textContent = `manual: ${chosen}`;
         badges.appendChild(bMan);
 
-        // changed marker
         const pred = r.top_label || "";
         const isSame =
           (pred === "" && set.size === 0) ||
@@ -946,10 +949,14 @@
       renderViewer();
       renderGrid();
 
+      // autoscroll ONLY if thumbsCard is visible
       if (scrollGrid) {
-        const grid = document.getElementById("grid");
-        const active = grid.querySelector(".tile.active");
-        if (active) active.scrollIntoView({block: "nearest"});
+        const thumbs = document.getElementById("thumbsCard");
+        if (isElementVisible(thumbs, 80)) {
+          const grid = document.getElementById("grid");
+          const active = grid && grid.querySelector(".tile.active");
+          if (active) active.scrollIntoView({block: "nearest"});
+        }
       }
     }
 
@@ -998,13 +1005,11 @@
       const head = parseCsvLine(lines.shift() || "");
       const idx = Object.fromEntries(head.map((h, i) => [h, i]));
 
-      // labels from p_*
       const labels = head
         .filter((h) => h.startsWith("p_"))
         .map((h) => h.slice(2));
       STATE.labels = labels;
 
-      // read annotations (supports legacy file/manual_label OR new one-hot)
       const annText = await fetchTextIfExists("annotations.csv");
       const annMap = new Map(); // file -> Set(labels)
 
@@ -1048,7 +1053,6 @@
         }
       }
 
-      // rows
       const rows = [];
       for (const line of lines) {
         if (!line.trim()) continue;
@@ -1067,7 +1071,6 @@
         }
         probs.sort((a, b) => b.value - a.value);
 
-        // manual_set: from annotations or default {pred}
         let manual_set = annMap.get(file);
         if (!manual_set) {
           manual_set = new Set();
@@ -1087,11 +1090,9 @@
       STATE.filteredIdx = rows.map((_, i) => i);
       STATE.activeIdx = STATE.filteredIdx.length ? STATE.filteredIdx[0] : 0;
 
-      // fill filters
       const filterManual = document.getElementById("filterManual");
       const filterPred = document.getElementById("filterPred");
 
-      // manual filter: list all labels
       for (const lbl of STATE.labels) {
         const o = document.createElement("option");
         o.value = lbl;
@@ -1110,7 +1111,6 @@
           filterPred.appendChild(o);
         });
 
-      // events
       document
         .getElementById("search")
         .addEventListener("input", applyFilters);
@@ -1131,18 +1131,17 @@
         }
       };
 
-      // zoom
       document.getElementById("bigimg").onclick = () => {
         const r = STATE.rows[STATE.activeIdx];
         if (r) openZoomByFile(r.file);
       };
+
       document.getElementById("modalClose").onclick = closeZoom;
       document.getElementById("modalImg").onclick = closeZoom;
       document.getElementById("modal").onclick = (ev) => {
         if (ev.target.id === "modal") closeZoom();
       };
 
-      // hotkeys
       window.addEventListener("keydown", async (ev) => {
         const tag =
           ev.target && ev.target.tagName
