@@ -250,7 +250,7 @@ impl EyeballerRunner {
             csv_name,
             images_dir,
             html_template,
-            Some("Eyeballer ONNX Report"),
+            Some("WebHound Report screens"),
         )?;
 
         Ok((csv_path, html_path))

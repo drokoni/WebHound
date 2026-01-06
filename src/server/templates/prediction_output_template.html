@@ -74,19 +74,11 @@
         text-decoration: underline;
       }
 
-      /* Layout: viewer on top, list below */
       .app {
         display: flex;
         flex-direction: column;
         gap: 14px;
         padding: 14px;
-      }
-
-      /* верхний блок всегда виден, а низ просто идет ниже */
-      #viewerCard {
-        position: sticky;
-        top: 14px;
-        z-index: 10;
       }
 
       .card {
@@ -234,7 +226,6 @@
         color: var(--muted);
       }
 
-      /* Viewer */
       .head {
         padding: 14px;
         border-bottom: 1px solid var(--line);
@@ -383,7 +374,6 @@
         text-align: right;
       }
 
-      /* List grid (instead of vertical list) */
       .gridWrap {
         display: block;
       }
@@ -408,7 +398,6 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
         gap: 12px;
-
         overflow: visible;
       }
 
@@ -488,7 +477,6 @@
         color: var(--warn);
       }
 
-      /* Modal zoom */
       .modal {
         position: fixed;
         inset: 0;
@@ -543,7 +531,6 @@
 
   <body>
     <div class="app">
-      <!-- TOP: Viewer -->
       <div class="card" id="viewerCard">
         <div class="top">
           <h1>WebHound report</h1>
@@ -595,6 +582,8 @@
 
         <div class="head">
           <div class="fileInfo" id="fileInfo"></div>
+          <!-- NEW: current position in filtered list -->
+          <span class="pill" id="posPill">0/0</span>
         </div>
 
         <div class="viewer">
@@ -631,7 +620,6 @@
         </div>
       </div>
 
-      <!-- BOTTOM: Grid -->
       <div class="card gridWrap" id="thumbsCard">
         <div class="gridTop">
           <div class="gridTitle">Thumbnails (click to open / select)</div>
@@ -641,7 +629,6 @@
       </div>
     </div>
 
-    <!-- ZOOM MODAL -->
     <div class="modal" id="modal">
       <div class="inner">
         <button class="close" id="modalClose">Esc / click image</button>
@@ -749,6 +736,15 @@
           `changed: ${changed}`;
       }
 
+      // NEW: current position in filtered list
+      function updatePositionPill() {
+        const idx = STATE.filteredIdx;
+        const total = idx.length;
+        const pos = total ? idx.indexOf(STATE.activeIdx) + 1 : 0;
+        const el = document.getElementById("posPill");
+        if (el) el.textContent = `${pos}/${total}`;
+      }
+
       function openZoomByFile(file) {
         const modal = document.getElementById("modal");
         const img = document.getElementById("modalImg");
@@ -798,7 +794,6 @@
           r.top_prob,
         ).toFixed(4);
 
-        // manual select
         const sel = document.getElementById("manualSelect");
         sel.innerHTML = "";
         const opt0 = document.createElement("option");
@@ -829,7 +824,6 @@
           renderAll(false);
         };
 
-        // probs
         const probsEl = document.getElementById("probs");
         probsEl.innerHTML = "";
         const frag = document.createDocumentFragment();
@@ -883,7 +877,6 @@
           img.src = encodeSrc(r.file);
           img.alt = r.file;
 
-          // ANY image click => zoom (stop to prevent selecting only)
           img.onclick = (ev) => {
             ev.stopPropagation();
             openZoomByFile(r.file);
@@ -931,6 +924,7 @@
 
       function renderAll(scrollGrid = true) {
         renderStats();
+        updatePositionPill(); // NEW
         renderViewer();
         renderGrid();
 
@@ -991,7 +985,6 @@
           .map((h) => h.slice(2));
         STATE.labels = labels;
 
-        // annotations
         const annText = await fetchTextIfExists("annotations.csv");
         const annMap = new Map();
         if (annText) {
@@ -1007,7 +1000,6 @@
           }
         }
 
-        // rows
         const rows = [];
         for (const line of lines) {
           if (!line.trim()) continue;
@@ -1040,7 +1032,6 @@
         STATE.filteredIdx = rows.map((_, i) => i);
         STATE.activeIdx = STATE.filteredIdx.length ? STATE.filteredIdx[0] : 0;
 
-        // fill filters
         const filterManual = document.getElementById("filterManual");
         const filterPred = document.getElementById("filterPred");
         const uniqMan = new Set(rows.map((r) => r.manual_label || ""));
@@ -1065,7 +1056,6 @@
             filterPred.appendChild(o);
           });
 
-        // events
         document
           .getElementById("search")
           .addEventListener("input", applyFilters);
@@ -1086,20 +1076,17 @@
           }
         };
 
-        // viewer image click => zoom
         document.getElementById("bigimg").onclick = () => {
           const r = STATE.rows[STATE.activeIdx];
           if (r) openZoomByFile(r.file);
         };
 
-        // modal close
         document.getElementById("modalClose").onclick = closeZoom;
         document.getElementById("modalImg").onclick = closeZoom;
         document.getElementById("modal").onclick = (ev) => {
           if (ev.target.id === "modal") closeZoom();
         };
 
-        // hotkeys
         window.addEventListener("keydown", async (ev) => {
           const tag =
             ev.target && ev.target.tagName
