@@ -1,1127 +1,1125 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>{TITLE}</title>
 
-    <style>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{TITLE}</title>
+
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #0f1621;
+      --panel2: #111b2a;
+      --text: #e7eef9;
+      --muted: #a8b3c5;
+      --line: rgba(255, 255, 255, 0.08);
+      --accent: #6aa9ff;
+      --good: #38d996;
+      --warn: #ffcc66;
+      --bad: #ff6b6b;
+      --r: 16px;
+      --r2: 22px;
+      --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      --mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+      --sans: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    @media (prefers-color-scheme: light) {
       :root {
-        --bg: #0b0f14;
-        --panel: #0f1621;
-        --panel2: #111b2a;
-        --text: #e7eef9;
-        --muted: #a8b3c5;
-        --line: rgba(255, 255, 255, 0.08);
-        --accent: #6aa9ff;
-        --good: #38d996;
-        --warn: #ffcc66;
-        --bad: #ff6b6b;
-        --r: 16px;
-        --r2: 22px;
-        --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-        --mono:
-          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-        --sans: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        --bg: #f6f7fb;
+        --panel: #ffffff;
+        --panel2: #f7f9ff;
+        --text: #101828;
+        --muted: #667085;
+        --line: rgba(16, 24, 40, 0.12);
+        --shadow: 0 14px 32px rgba(16, 24, 40, 0.12);
       }
+    }
 
-      @media (prefers-color-scheme: light) {
-        :root {
-          --bg: #f6f7fb;
-          --panel: #ffffff;
-          --panel2: #f7f9ff;
-          --text: #101828;
-          --muted: #667085;
-          --line: rgba(16, 24, 40, 0.12);
-          --shadow: 0 14px 32px rgba(16, 24, 40, 0.12);
-        }
-      }
+    * {
+      box-sizing: border-box;
+    }
 
-      * {
-        box-sizing: border-box;
-      }
+    html,
+    body {
+      height: 100%;
+    }
 
-      html,
-      body {
-        height: 100%;
-      }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(1200px 800px at 15% -10%,
+          rgba(106, 169, 255, 0.14),
+          transparent 55%),
+        radial-gradient(900px 600px at 105% 0%,
+          rgba(56, 217, 150, 0.1),
+          transparent 55%),
+        var(--bg);
+    }
 
-      body {
-        margin: 0;
-        font-family: var(--sans);
-        color: var(--text);
-        background:
-          radial-gradient(
-            1200px 800px at 15% -10%,
-            rgba(106, 169, 255, 0.14),
-            transparent 55%
-          ),
-          radial-gradient(
-            900px 600px at 105% 0%,
-            rgba(56, 217, 150, 0.1),
-            transparent 55%
-          ),
-          var(--bg);
-      }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
 
-      a {
-        color: var(--accent);
-        text-decoration: none;
-      }
+    a:hover {
+      text-decoration: underline;
+    }
 
-      a:hover {
-        text-decoration: underline;
-      }
+    .app {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 14px;
+    }
 
-      .app {
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-        padding: 14px;
-      }
-
-      .card {
-        background: linear-gradient(
-          180deg,
+    .card {
+      background: linear-gradient(180deg,
           rgba(255, 255, 255, 0.03),
-          rgba(255, 255, 255, 0)
-        );
-        background-color: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: var(--r2);
-        box-shadow: var(--shadow);
-        overflow: hidden;
-        min-height: 0;
-      }
+          rgba(255, 255, 255, 0));
+      background-color: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--r2);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 0;
+    }
 
-      .top {
-        padding: 14px;
-        border-bottom: 1px solid var(--line);
-      }
+    .top {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
 
-      h1 {
-        margin: 0;
-        font-size: 18px;
-        letter-spacing: 0.2px;
-      }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.2px;
+    }
 
-      .meta {
-        margin-top: 8px;
-        font-size: 12px;
-        color: var(--muted);
-        line-height: 1.5;
-      }
+    .meta {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
 
-      .meta code {
-        font-family: var(--mono);
-        font-size: 11px;
-        padding: 1px 6px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.03);
-      }
+    .meta code {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 1px 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.03);
+    }
 
-      .controls {
-        margin-top: 12px;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-      }
+    .controls {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
 
-      .controls .row {
-        grid-column: 1/-1;
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
+    .controls .row {
+      grid-column: 1/-1;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
 
-      input,
-      select,
-      button {
-        color: var(--text);
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 10px 10px;
-        font-size: 13px;
-        outline: none;
-      }
+    input,
+    select,
+    button {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 10px;
+      font-size: 13px;
+      outline: none;
+    }
 
-      input::placeholder {
-        color: rgba(168, 179, 197, 0.7);
-      }
+    input::placeholder {
+      color: rgba(168, 179, 197, 0.7);
+    }
 
-      button {
-        cursor: pointer;
-        user-select: none;
-        background: rgba(106, 169, 255, 0.1);
-        border-color: rgba(106, 169, 255, 0.25);
-      }
+    button {
+      cursor: pointer;
+      user-select: none;
+      background: rgba(106, 169, 255, 0.1);
+      border-color: rgba(106, 169, 255, 0.25);
+    }
 
-      button:hover {
-        background: rgba(106, 169, 255, 0.16);
-      }
+    button:hover {
+      background: rgba(106, 169, 255, 0.16);
+    }
 
-      .btn-ghost {
-        background: rgba(255, 255, 255, 0.03);
-        border-color: var(--line);
-      }
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.03);
+      border-color: var(--line);
+    }
 
-      .btn-good {
-        background: rgba(56, 217, 150, 0.12);
-        border-color: rgba(56, 217, 150, 0.28);
-      }
+    .btn-good {
+      background: rgba(56, 217, 150, 0.12);
+      border-color: rgba(56, 217, 150, 0.28);
+    }
 
-      .btn-good:hover {
-        background: rgba(56, 217, 150, 0.18);
-      }
+    .btn-good:hover {
+      background: rgba(56, 217, 150, 0.18);
+    }
 
-      .btn-danger {
-        background: rgba(255, 107, 107, 0.12);
-        border-color: rgba(255, 107, 107, 0.28);
-      }
+    .btn-danger {
+      background: rgba(255, 107, 107, 0.12);
+      border-color: rgba(255, 107, 107, 0.28);
+    }
 
-      .btn-danger:hover {
-        background: rgba(255, 107, 107, 0.18);
-      }
+    .btn-danger:hover {
+      background: rgba(255, 107, 107, 0.18);
+    }
 
-      .pillrow {
-        margin-top: 10px;
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
+    .pillrow {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
 
-      .pill {
-        font-size: 12px;
-        padding: 4px 10px;
-        border-radius: 999px;
-        border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.03);
-        color: var(--muted);
-        white-space: nowrap;
-      }
+    .pill {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      white-space: nowrap;
+    }
 
-      .pill.good {
-        color: var(--good);
-        border-color: rgba(56, 217, 150, 0.25);
-        background: rgba(56, 217, 150, 0.08);
-      }
+    .pill.good {
+      color: var(--good);
+      border-color: rgba(56, 217, 150, 0.25);
+      background: rgba(56, 217, 150, 0.08);
+    }
 
-      .pill.warn {
-        color: var(--warn);
-        border-color: rgba(255, 204, 102, 0.25);
-        background: rgba(255, 204, 102, 0.08);
-      }
+    .pill.warn {
+      color: var(--warn);
+      border-color: rgba(255, 204, 102, 0.25);
+      background: rgba(255, 204, 102, 0.08);
+    }
 
-      .kbd {
-        font-family: var(--mono);
-        font-size: 11px;
-        padding: 2px 6px;
-        border-radius: 8px;
-        border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.03);
-        color: var(--muted);
-      }
+    .kbd {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+    }
 
-      .head {
-        padding: 14px;
-        border-bottom: 1px solid var(--line);
-        display: flex;
-        gap: 10px;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-      }
+    .head {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
 
-      .fileInfo {
-        font-family: var(--mono);
-        font-size: 12px;
-        color: var(--muted);
-        word-break: break-all;
-        max-width: 90ch;
-      }
+    .fileInfo {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      word-break: break-all;
+      max-width: 90ch;
+    }
 
+    .viewer {
+      padding: 14px;
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    @media (max-width: 980px) {
       .viewer {
-        padding: 14px;
-        display: grid;
-        grid-template-columns: 1fr 380px;
-        gap: 14px;
-        min-height: 0;
+        grid-template-columns: 1fr;
       }
+    }
 
-      @media (max-width: 980px) {
-        .viewer {
-          grid-template-columns: 1fr;
-        }
-      }
+    .imgWrap {
+      border-radius: var(--r2);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.02);
+      overflow: hidden;
+      min-height: 45vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
 
-      .imgWrap {
-        border-radius: var(--r2);
-        border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.02);
-        overflow: hidden;
-        min-height: 45vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-      }
+    .bigimg {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      cursor: zoom-in;
+    }
 
-      .bigimg {
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
-        cursor: zoom-in;
-      }
+    .imgHint {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.28);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 6px 10px;
+      border-radius: 999px;
+      backdrop-filter: blur(6px);
+    }
 
+    @media (prefers-color-scheme: light) {
       .imgHint {
-        position: absolute;
-        left: 12px;
-        bottom: 12px;
-        font-size: 12px;
-        color: var(--muted);
-        background: rgba(0, 0, 0, 0.28);
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        padding: 6px 10px;
-        border-radius: 999px;
-        backdrop-filter: blur(6px);
+        background: rgba(255, 255, 255, 0.55);
+        border-color: rgba(16, 24, 40, 0.18);
       }
+    }
 
-      @media (prefers-color-scheme: light) {
-        .imgHint {
-          background: rgba(255, 255, 255, 0.55);
-          border-color: rgba(16, 24, 40, 0.18);
-        }
-      }
+    .section {
+      border: 1px solid var(--line);
+      border-radius: var(--r2);
+      background: rgba(255, 255, 255, 0.02);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
 
-      .section {
-        border: 1px solid var(--line);
-        border-radius: var(--r2);
-        background: rgba(255, 255, 255, 0.02);
-        padding: 12px;
-        margin-bottom: 12px;
-      }
+    .section h3 {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 600;
+    }
 
-      .section h3 {
-        margin: 0 0 8px 0;
-        font-size: 13px;
-        color: var(--muted);
-        font-weight: 600;
-      }
+    .kv {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+    }
 
-      .kv {
-        display: grid;
-        grid-template-columns: 92px 1fr;
-        gap: 8px;
-        align-items: center;
-        font-size: 13px;
-      }
+    .kv .k {
+      color: var(--muted);
+    }
 
-      .kv .k {
-        color: var(--muted);
-      }
+    .kv .v {
+      font-family: var(--mono);
+      font-size: 12px;
+    }
 
-      .kv .v {
-        font-family: var(--mono);
-        font-size: 12px;
-      }
+    .probs {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
 
-      .probs {
-        margin-top: 10px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
+    .barrow {
+      display: grid;
+      grid-template-columns: 1fr 60px;
+      gap: 10px;
+      align-items: center;
+    }
 
-      .barrow {
-        display: grid;
-        grid-template-columns: 1fr 60px;
-        gap: 10px;
-        align-items: center;
-      }
+    .barrow .lbl {
+      font-family: var(--mono);
+      font-size: 12px;
+    }
 
-      .barrow .lbl {
-        font-family: var(--mono);
-        font-size: 12px;
-      }
+    .bar {
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      margin-top: 6px;
+    }
 
-      .bar {
-        height: 10px;
-        border-radius: 999px;
-        overflow: hidden;
-        border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.04);
-        margin-top: 6px;
-      }
-
-      .bar > div {
-        height: 100%;
-        width: 0%;
-        background: linear-gradient(
-          90deg,
+    .bar>div {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg,
           rgba(106, 169, 255, 0.95),
-          rgba(56, 217, 150, 0.95)
-        );
-      }
+          rgba(56, 217, 150, 0.95));
+    }
 
-      .pct {
-        font-family: var(--mono);
-        font-size: 12px;
-        color: var(--muted);
-        text-align: right;
-      }
+    .pct {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      text-align: right;
+    }
 
-      .gridWrap {
-        display: block;
-      }
+    .gridWrap {
+      display: block;
+    }
 
-      .gridTop {
-        padding: 14px;
-        border-bottom: 1px solid var(--line);
-        display: flex;
-        justify-content: space-between;
-        gap: 10px;
-        align-items: center;
-        flex-wrap: wrap;
-      }
+    .gridTop {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
 
-      .gridTitle {
-        font-size: 13px;
-        color: var(--muted);
-      }
+    .gridTitle {
+      font-size: 13px;
+      color: var(--muted);
+    }
 
-      .grid {
-        padding: 12px;
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 12px;
-        overflow: visible;
-      }
+    .grid {
+      padding: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      overflow: visible;
+    }
 
-      .tile {
-        border: 1px solid var(--line);
-        border-radius: var(--r2);
-        background: rgba(255, 255, 255, 0.02);
-        overflow: hidden;
-        cursor: pointer;
-        transition:
-          transform 0.08s ease,
-          border-color 0.15s ease,
-          background 0.15s ease;
-      }
+    .tile {
+      border: 1px solid var(--line);
+      border-radius: var(--r2);
+      background: rgba(255, 255, 255, 0.02);
+      overflow: hidden;
+      cursor: pointer;
+      transition:
+        transform 0.08s ease,
+        border-color 0.15s ease,
+        background 0.15s ease;
+    }
 
-      .tile:hover {
-        transform: translateY(-1px);
-        border-color: rgba(106, 169, 255, 0.22);
-        background: rgba(255, 255, 255, 0.04);
-      }
+    .tile:hover {
+      transform: translateY(-1px);
+      border-color: rgba(106, 169, 255, 0.22);
+      background: rgba(255, 255, 255, 0.04);
+    }
 
-      .tile.active {
-        border-color: rgba(106, 169, 255, 0.4);
-        background: rgba(106, 169, 255, 0.1);
-      }
+    .tile.active {
+      border-color: rgba(106, 169, 255, 0.4);
+      background: rgba(106, 169, 255, 0.1);
+    }
 
-      .tileImg {
-        width: 100%;
-        height: 140px;
-        object-fit: cover;
-        display: block;
-        background: rgba(255, 255, 255, 0.02);
-      }
+    .tileImg {
+      width: 100%;
+      height: 140px;
+      object-fit: cover;
+      display: block;
+      background: rgba(255, 255, 255, 0.02);
+    }
 
-      .tileBody {
-        padding: 10px;
-      }
+    .tileBody {
+      padding: 10px;
+    }
 
-      .tileName {
-        font-family: var(--mono);
-        font-size: 12px;
-        line-height: 1.3;
-        word-break: break-all;
-      }
+    .tileName {
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.3;
+      word-break: break-all;
+    }
 
-      .badges {
-        margin-top: 8px;
-        display: flex;
-        gap: 6px;
-        flex-wrap: wrap;
-      }
+    .badges {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
 
-      .badge {
-        font-size: 11px;
-        padding: 2px 8px;
-        border-radius: 999px;
-        border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.03);
-        color: var(--muted);
-      }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+    }
 
-      .badge.pred {
-        border-color: rgba(106, 169, 255, 0.24);
-        background: rgba(106, 169, 255, 0.08);
-        color: var(--accent);
-      }
+    .badge.pred {
+      border-color: rgba(106, 169, 255, 0.24);
+      background: rgba(106, 169, 255, 0.08);
+      color: var(--accent);
+    }
 
-      .badge.manual {
-        border-color: rgba(56, 217, 150, 0.24);
-        background: rgba(56, 217, 150, 0.08);
-        color: var(--good);
-      }
+    .badge.manual {
+      border-color: rgba(56, 217, 150, 0.24);
+      background: rgba(56, 217, 150, 0.08);
+      color: var(--good);
+    }
 
-      .badge.changed {
-        border-color: rgba(255, 204, 102, 0.25);
-        background: rgba(255, 204, 102, 0.08);
-        color: var(--warn);
-      }
+    .badge.changed {
+      border-color: rgba(255, 204, 102, 0.25);
+      background: rgba(255, 204, 102, 0.08);
+      color: var(--warn);
+    }
 
-      .modal {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.68);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-        padding: 22px;
-      }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.68);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 22px;
+    }
 
-      .modal.open {
-        display: flex;
-      }
+    .modal.open {
+      display: flex;
+    }
 
-      .modal .inner {
-        width: min(1400px, 100%);
-        height: min(900px, 100%);
-        border-radius: 22px;
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        background: rgba(10, 14, 20, 0.78);
-        backdrop-filter: blur(10px);
-        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
-        position: relative;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
+    .modal .inner {
+      width: min(1400px, 100%);
+      height: min(900px, 100%);
+      border-radius: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(10, 14, 20, 0.78);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-      .modal img {
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
-        cursor: zoom-out;
-      }
+    .modal img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      cursor: zoom-out;
+    }
 
-      .modal .close {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        padding: 8px 10px;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        background: rgba(255, 255, 255, 0.06);
-        color: var(--text);
-        cursor: pointer;
-        font-size: 12px;
-      }
-    </style>
-  </head>
+    .modal .close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 12px;
+    }
+  </style>
+</head>
 
-  <body>
-    <div class="app">
-      <div class="card" id="viewerCard">
-        <div class="top">
-          <h1>WebHound report</h1>
-          <div class="meta">
-            <div>Images: <code>{IMAGES_DIR}</code></div>
-            <div style="margin-top: 6px">
-              Predictions: <a href="./{CSV_NAME}">{CSV_NAME}</a> · Annotations:
-              <a href="./annotations.csv">annotations.csv</a>
-            </div>
-          </div>
-
-          <div class="controls">
-            <input
-              id="search"
-              class="row"
-              type="text"
-              placeholder="Search filename…"
-            />
-            <select id="filterManual">
-              <option value="">manual: (all)</option>
-            </select>
-            <select id="filterPred">
-              <option value="">pred: (all)</option>
-            </select>
-
-            <div class="row">
-              <button id="btnPrev" class="btn-ghost">← Prev</button>
-              <button id="btnNext" class="btn-ghost">Next →</button>
-              <button id="btnSave" class="btn-good">Save</button>
-              <button id="btnDownload" class="btn-ghost">Download</button>
-              <button id="btnSetPred" class="btn-ghost">manual = pred</button>
-              <button id="btnClear" class="btn-danger">Clear</button>
-            </div>
-
-            <div class="pillrow">
-              <span class="pill" id="countPill">0/0</span>
-              <span class="pill" id="changedPill">changed: 0</span>
-              <span class="pill warn">
-                keys: <span class="kbd">←</span><span class="kbd">→</span>
-                <span class="kbd">1..9</span> <span class="kbd">0</span>
-                <span class="kbd">S</span> <span class="kbd">Esc</span>
-              </span>
-              <span class="pill good" id="savedPill" style="display: none"
-                >saved</span
-              >
-            </div>
+<body>
+  <div class="app">
+    <div class="card" id="viewerCard">
+      <div class="top">
+        <h1>WebHound report</h1>
+        <div class="meta">
+          <div>Images: <code>{IMAGES_DIR}</code></div>
+          <div style="margin-top: 6px">
+            Predictions: <a href="./{CSV_NAME}">{CSV_NAME}</a> · Annotations:
+            <a href="./annotations.csv">annotations.csv</a>
           </div>
         </div>
 
-        <div class="head">
-          <div class="fileInfo" id="fileInfo"></div>
-          <!-- NEW: current position in filtered list -->
-          <span class="pill" id="posPill">0/0</span>
-        </div>
+        <div class="controls">
+          <input id="search" class="row" type="text" placeholder="Search filename…" />
+          <select id="filterManual">
+            <option value="">manual: (all)</option>
+          </select>
+          <select id="filterPred">
+            <option value="">pred: (all)</option>
+          </select>
 
-        <div class="viewer">
-          <div class="imgWrap">
-            <img id="bigimg" class="bigimg" alt="preview" />
-            <div class="imgHint">Click to zoom</div>
+          <div class="row">
+            <button id="btnPrev" class="btn-ghost">← Prev</button>
+            <button id="btnNext" class="btn-ghost">Next →</button>
+            <button id="btnSave" class="btn-good">Save</button>
+            <button id="btnDownload" class="btn-ghost">Download</button>
+            <button id="btnSetPred" class="btn-ghost">manual = pred</button>
+            <button id="btnClear" class="btn-danger">Clear</button>
           </div>
 
-          <div>
-            <div class="section">
-              <h3>Label</h3>
-              <div class="kv">
-                <div class="k">Manual</div>
-                <div class="v">
-                  <select
-                    id="manualSelect"
-                    style="width: 100%; padding: 10px; border-radius: 14px"
-                  ></select>
-                </div>
+          <div class="pillrow">
+            <span class="pill" id="countPill">0/0</span>
+            <span class="pill" id="changedPill">changed: 0</span>
+            <span class="pill warn">
+              keys: <span class="kbd">←</span><span class="kbd">→</span>
+              <span class="kbd">1..9</span> <span class="kbd">0</span>
+              <span class="kbd">S</span> <span class="kbd">Esc</span>
+            </span>
+            <span class="pill good" id="savedPill" style="display: none">saved</span>
+          </div>
+        </div>
+      </div>
 
-                <div class="k">Pred</div>
-                <div class="v" id="predLabel"></div>
+      <div class="head">
+        <div class="fileInfo" id="fileInfo"></div>
+        <!-- NEW: current position in filtered list -->
+        <span class="pill" id="posPill">0/0</span>
+      </div>
 
-                <div class="k">Prob</div>
-                <div class="v" id="predProb"></div>
+      <div class="viewer">
+        <div class="imgWrap">
+          <img id="bigimg" class="bigimg" alt="preview" />
+          <div class="imgHint">Click to zoom</div>
+        </div>
+
+        <div>
+          <div class="section">
+            <h3>Label</h3>
+            <div class="kv">
+              <div class="k">Manual</div>
+              <div class="v">
+                <select id="manualSelect" style="width: 100%; padding: 10px; border-radius: 14px"></select>
               </div>
-            </div>
 
-            <div class="section">
-              <h3>All probabilities</h3>
-              <div class="probs" id="probs"></div>
+              <div class="k">Pred</div>
+              <div class="v" id="predLabel"></div>
+
+              <div class="k">Prob</div>
+              <div class="v" id="predProb"></div>
             </div>
+          </div>
+
+          <div class="section">
+            <h3>All probabilities</h3>
+            <div class="probs" id="probs"></div>
           </div>
         </div>
       </div>
-
-      <div class="card gridWrap" id="thumbsCard">
-        <div class="gridTop">
-          <div class="gridTitle">Thumbnails (click to open / select)</div>
-          <div class="pill">Tip: click any image to zoom</div>
-        </div>
-        <div class="grid" id="grid"></div>
-      </div>
     </div>
 
-    <div class="modal" id="modal">
-      <div class="inner">
-        <button class="close" id="modalClose">Esc / click image</button>
-        <img id="modalImg" alt="zoomed" />
+    <div class="card gridWrap" id="thumbsCard">
+      <div class="gridTop">
+        <div class="gridTitle">Thumbnails (click to open / select)</div>
+        <div class="pill">Tip: click any image to zoom</div>
       </div>
+      <div class="grid" id="grid"></div>
     </div>
+  </div>
 
-    <script>
-      const STATE = { rows: [], labels: [], filteredIdx: [], activeIdx: 0 };
+  <div class="modal" id="modal">
+    <div class="inner">
+      <button class="close" id="modalClose">Esc / click image</button>
+      <img id="modalImg" alt="zoomed" />
+    </div>
+  </div>
 
-      function parseCsvLine(line) {
-        const out = [];
-        let cur = "";
-        let inQ = false;
-        for (let i = 0; i < line.length; i++) {
-          const ch = line[i];
-          if (inQ) {
-            if (ch === '"' && line[i + 1] === '"') {
-              cur += '"';
-              i++;
-            } else if (ch === '"') inQ = false;
-            else cur += ch;
-          } else {
-            if (ch === '"') inQ = true;
-            else if (ch === ",") {
-              out.push(cur);
-              cur = "";
-            } else cur += ch;
-          }
+  <script>
+    const STATE = {rows: [], labels: [], filteredIdx: [], activeIdx: 0};
+
+    function parseCsvLine(line) {
+      const out = [];
+      let cur = "";
+      let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQ) {
+          if (ch === '"' && line[i + 1] === '"') {
+            cur += '"';
+            i++;
+          } else if (ch === '"') inQ = false;
+          else cur += ch;
+        } else {
+          if (ch === '"') inQ = true;
+          else if (ch === ",") {
+            out.push(cur);
+            cur = "";
+          } else cur += ch;
         }
-        out.push(cur);
-        return out;
       }
+      out.push(cur);
+      return out;
+    }
 
-      function csvEsc(v) {
-        const s = String(v ?? "");
-        if (/[,"\r\n]/.test(s)) return `"${s.replaceAll('"', '""')}"`;
-        return s;
-      }
+    function csvEsc(v) {
+      const s = String(v ?? "");
+      if (/[,"\r\n]/.test(s)) return `"${s.replaceAll('"', '""')}"`;
+      return s;
+    }
 
-      function encodeSrc(file) {
-        const s = file.startsWith("./") ? file : `./${file}`;
-        return encodeURI(s);
-      }
+    function encodeSrc(file) {
+      const s = file.startsWith("./") ? file : `./${file}`;
+      return encodeURI(s);
+    }
 
-      async function fetchTextIfExists(name) {
-        const r = await fetch(name);
-        if (!r.ok) return null;
-        return await r.text();
-      }
+    async function fetchTextIfExists(name) {
+      const r = await fetch(name);
+      if (!r.ok) return null;
+      return await r.text();
+    }
 
-      function buildAnnotationsCsv() {
-        const lines = [];
-        lines.push(["file", "manual_label"].map(csvEsc).join(","));
-        const rows = [...STATE.rows].sort((a, b) =>
-          String(a.file).localeCompare(String(b.file)),
+    // annotations.csv (one-hot):
+    // filename,<label1>,<label2>,...
+    // a.png,FALSE,TRUE,...
+    function buildAnnotationsCsv() {
+      const lines = [];
+
+      // header
+      lines.push(["filename", ...STATE.labels].map(csvEsc).join(","));
+
+      // stable order
+      const rows = [...STATE.rows].sort((a, b) =>
+        String(a.file).localeCompare(String(b.file)),
+      );
+
+      for (const r of rows) {
+        const chosen = String(r.manual_label || "").trim();
+        const flags = STATE.labels.map((lbl) =>
+          lbl === chosen ? "TRUE" : "FALSE",
         );
-        for (const r of rows)
-          lines.push([r.file, r.manual_label ?? ""].map(csvEsc).join(","));
-        return lines.join("\n") + "\n";
+        lines.push([r.file, ...flags].map(csvEsc).join(","));
       }
 
-      function showSaved(msg) {
-        const el = document.getElementById("savedPill");
-        el.textContent = msg || "saved";
-        el.style.display = "inline-block";
-        setTimeout(() => {
-          el.style.display = "none";
-        }, 1200);
+      return lines.join("\n") + "\n";
+    }
+
+    function showSaved(msg) {
+      const el = document.getElementById("savedPill");
+      el.textContent = msg || "saved";
+      el.style.display = "inline-block";
+      setTimeout(() => {
+        el.style.display = "none";
+      }, 1200);
+    }
+
+    async function saveToServer() {
+      const csv = buildAnnotationsCsv();
+      const r = await fetch("/api/annotations", {
+        method: "POST",
+        headers: {"Content-Type": "text/csv;charset=utf-8"},
+        body: csv,
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      showSaved("saved");
+    }
+
+    function downloadCsv() {
+      const csv = buildAnnotationsCsv();
+      const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "annotations.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      showSaved("downloaded");
+    }
+
+    function renderStats() {
+      const total = STATE.rows.length;
+      const shown = STATE.filteredIdx.length;
+      let changed = 0;
+      for (const r of STATE.rows) {
+        const ml = r.manual_label || "";
+        if (ml !== "" && ml !== (r.top_label || "")) changed++;
+      }
+      document.getElementById("countPill").textContent = `${shown}/${total}`;
+      document.getElementById("changedPill").textContent =
+        `changed: ${changed}`;
+    }
+
+    // NEW: current position in filtered list
+    function updatePositionPill() {
+      const idx = STATE.filteredIdx;
+      const total = idx.length;
+      const pos = total ? idx.indexOf(STATE.activeIdx) + 1 : 0;
+      const el = document.getElementById("posPill");
+      if (el) el.textContent = `${pos}/${total}`;
+    }
+
+    function openZoomByFile(file) {
+      const modal = document.getElementById("modal");
+      const img = document.getElementById("modalImg");
+      img.src = encodeSrc(file);
+      modal.classList.add("open");
+    }
+
+    function closeZoom() {
+      document.getElementById("modal").classList.remove("open");
+    }
+
+    function applyFilters() {
+      const q = document.getElementById("search").value.trim().toLowerCase();
+      const fMan = document.getElementById("filterManual").value;
+      const fPred = document.getElementById("filterPred").value;
+
+      const idx = [];
+      for (let i = 0; i < STATE.rows.length; i++) {
+        const r = STATE.rows[i];
+        if (q && !String(r.file).toLowerCase().includes(q)) continue;
+        if (fMan && String(r.manual_label || "") !== fMan) continue;
+        if (fPred && String(r.top_label || "") !== fPred) continue;
+        idx.push(i);
+      }
+      STATE.filteredIdx = idx;
+      if (!idx.includes(STATE.activeIdx))
+        STATE.activeIdx = idx.length ? idx[0] : 0;
+      renderAll();
+    }
+
+    function renderViewer() {
+      const r = STATE.rows[STATE.activeIdx];
+      const fileInfo = document.getElementById("fileInfo");
+      const big = document.getElementById("bigimg");
+
+      if (!r) {
+        fileInfo.textContent = "(no items)";
+        big.removeAttribute("src");
+        return;
       }
 
-      async function saveToServer() {
-        const csv = buildAnnotationsCsv();
-        const r = await fetch("/api/annotations", {
-          method: "POST",
-          headers: { "Content-Type": "text/csv;charset=utf-8" },
-          body: csv,
-        });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        showSaved("saved");
+      fileInfo.textContent = r.file;
+      big.src = encodeSrc(r.file);
+
+      document.getElementById("predLabel").textContent = String(r.top_label);
+      document.getElementById("predProb").textContent = Number(
+        r.top_prob,
+      ).toFixed(4);
+
+      const sel = document.getElementById("manualSelect");
+      sel.innerHTML = "";
+      const opt0 = document.createElement("option");
+      opt0.value = "";
+      opt0.textContent = "(empty)";
+      sel.appendChild(opt0);
+
+      for (const lbl of STATE.labels) {
+        const opt = document.createElement("option");
+        opt.value = lbl;
+        opt.textContent = lbl;
+        sel.appendChild(opt);
+      }
+      if (
+        r.manual_label &&
+        r.manual_label !== "" &&
+        !STATE.labels.includes(r.manual_label)
+      ) {
+        const opt = document.createElement("option");
+        opt.value = r.manual_label;
+        opt.textContent = r.manual_label;
+        sel.appendChild(opt);
       }
 
-      function downloadCsv() {
-        const csv = buildAnnotationsCsv();
-        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "annotations.csv";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        showSaved("downloaded");
+      sel.value = r.manual_label || "";
+      sel.onchange = () => {
+        r.manual_label = sel.value;
+        renderAll(false);
+      };
+
+      const probsEl = document.getElementById("probs");
+      probsEl.innerHTML = "";
+      const frag = document.createDocumentFragment();
+
+      for (const p of r.probs) {
+        const row = document.createElement("div");
+        row.className = "barrow";
+
+        const left = document.createElement("div");
+        const lbl = document.createElement("div");
+        lbl.className = "lbl";
+        lbl.textContent = p.label;
+
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        const fill = document.createElement("div");
+        fill.style.width = `${Math.max(0, Math.min(1, p.value)) * 100}%`;
+        bar.appendChild(fill);
+
+        left.appendChild(lbl);
+        left.appendChild(bar);
+
+        const pct = document.createElement("div");
+        pct.className = "pct";
+        pct.textContent = p.value.toFixed(4);
+
+        row.appendChild(left);
+        row.appendChild(pct);
+        frag.appendChild(row);
       }
+      probsEl.appendChild(frag);
+    }
 
-      function renderStats() {
-        const total = STATE.rows.length;
-        const shown = STATE.filteredIdx.length;
-        let changed = 0;
-        for (const r of STATE.rows) {
-          const ml = r.manual_label || "";
-          if (ml !== "" && ml !== (r.top_label || "")) changed++;
-        }
-        document.getElementById("countPill").textContent = `${shown}/${total}`;
-        document.getElementById("changedPill").textContent =
-          `changed: ${changed}`;
-      }
+    function renderGrid() {
+      const el = document.getElementById("grid");
+      el.innerHTML = "";
+      const frag = document.createDocumentFragment();
 
-      // NEW: current position in filtered list
-      function updatePositionPill() {
-        const idx = STATE.filteredIdx;
-        const total = idx.length;
-        const pos = total ? idx.indexOf(STATE.activeIdx) + 1 : 0;
-        const el = document.getElementById("posPill");
-        if (el) el.textContent = `${pos}/${total}`;
-      }
+      for (const i of STATE.filteredIdx) {
+        const r = STATE.rows[i];
 
-      function openZoomByFile(file) {
-        const modal = document.getElementById("modal");
-        const img = document.getElementById("modalImg");
-        img.src = encodeSrc(file);
-        modal.classList.add("open");
-      }
-
-      function closeZoom() {
-        document.getElementById("modal").classList.remove("open");
-      }
-
-      function applyFilters() {
-        const q = document.getElementById("search").value.trim().toLowerCase();
-        const fMan = document.getElementById("filterManual").value;
-        const fPred = document.getElementById("filterPred").value;
-
-        const idx = [];
-        for (let i = 0; i < STATE.rows.length; i++) {
-          const r = STATE.rows[i];
-          if (q && !String(r.file).toLowerCase().includes(q)) continue;
-          if (fMan && String(r.manual_label || "") !== fMan) continue;
-          if (fPred && String(r.top_label || "") !== fPred) continue;
-          idx.push(i);
-        }
-        STATE.filteredIdx = idx;
-        if (!idx.includes(STATE.activeIdx))
-          STATE.activeIdx = idx.length ? idx[0] : 0;
-        renderAll();
-      }
-
-      function renderViewer() {
-        const r = STATE.rows[STATE.activeIdx];
-        const fileInfo = document.getElementById("fileInfo");
-        const big = document.getElementById("bigimg");
-
-        if (!r) {
-          fileInfo.textContent = "(no items)";
-          big.removeAttribute("src");
-          return;
-        }
-
-        fileInfo.textContent = r.file;
-        big.src = encodeSrc(r.file);
-
-        document.getElementById("predLabel").textContent = String(r.top_label);
-        document.getElementById("predProb").textContent = Number(
-          r.top_prob,
-        ).toFixed(4);
-
-        const sel = document.getElementById("manualSelect");
-        sel.innerHTML = "";
-        const opt0 = document.createElement("option");
-        opt0.value = "";
-        opt0.textContent = "(empty)";
-        sel.appendChild(opt0);
-
-        for (const lbl of STATE.labels) {
-          const opt = document.createElement("option");
-          opt.value = lbl;
-          opt.textContent = lbl;
-          sel.appendChild(opt);
-        }
-        if (
-          r.manual_label &&
-          r.manual_label !== "" &&
-          !STATE.labels.includes(r.manual_label)
-        ) {
-          const opt = document.createElement("option");
-          opt.value = r.manual_label;
-          opt.textContent = r.manual_label;
-          sel.appendChild(opt);
-        }
-
-        sel.value = r.manual_label || "";
-        sel.onchange = () => {
-          r.manual_label = sel.value;
-          renderAll(false);
+        const tile = document.createElement("div");
+        tile.className = "tile" + (i === STATE.activeIdx ? " active" : "");
+        tile.onclick = () => {
+          STATE.activeIdx = i;
+          renderAll();
         };
 
-        const probsEl = document.getElementById("probs");
-        probsEl.innerHTML = "";
-        const frag = document.createDocumentFragment();
+        const img = document.createElement("img");
+        img.className = "tileImg";
+        img.src = encodeSrc(r.file);
+        img.alt = r.file;
 
-        for (const p of r.probs) {
-          const row = document.createElement("div");
-          row.className = "barrow";
+        img.onclick = (ev) => {
+          ev.stopPropagation();
+          openZoomByFile(r.file);
+        };
 
-          const left = document.createElement("div");
-          const lbl = document.createElement("div");
-          lbl.className = "lbl";
-          lbl.textContent = p.label;
+        tile.appendChild(img);
 
-          const bar = document.createElement("div");
-          bar.className = "bar";
-          const fill = document.createElement("div");
-          fill.style.width = `${Math.max(0, Math.min(1, p.value)) * 100}%`;
-          bar.appendChild(fill);
+        const body = document.createElement("div");
+        body.className = "tileBody";
 
-          left.appendChild(lbl);
-          left.appendChild(bar);
+        const name = document.createElement("div");
+        name.className = "tileName";
+        name.textContent = r.file;
+        body.appendChild(name);
 
-          const pct = document.createElement("div");
-          pct.className = "pct";
-          pct.textContent = p.value.toFixed(4);
+        const badges = document.createElement("div");
+        badges.className = "badges";
 
-          row.appendChild(left);
-          row.appendChild(pct);
-          frag.appendChild(row);
-        }
-        probsEl.appendChild(frag);
-      }
+        const bPred = document.createElement("span");
+        bPred.className = "badge pred";
+        bPred.textContent = `pred: ${r.top_label}`;
+        badges.appendChild(bPred);
 
-      function renderGrid() {
-        const el = document.getElementById("grid");
-        el.innerHTML = "";
-        const frag = document.createDocumentFragment();
+        const bMan = document.createElement("span");
+        bMan.className = "badge manual";
+        bMan.textContent = `manual: ${r.manual_label || "(empty)"}`;
+        badges.appendChild(bMan);
 
-        for (const i of STATE.filteredIdx) {
-          const r = STATE.rows[i];
-
-          const tile = document.createElement("div");
-          tile.className = "tile" + (i === STATE.activeIdx ? " active" : "");
-          tile.onclick = () => {
-            STATE.activeIdx = i;
-            renderAll();
-          };
-
-          const img = document.createElement("img");
-          img.className = "tileImg";
-          img.src = encodeSrc(r.file);
-          img.alt = r.file;
-
-          img.onclick = (ev) => {
-            ev.stopPropagation();
-            openZoomByFile(r.file);
-          };
-
-          tile.appendChild(img);
-
-          const body = document.createElement("div");
-          body.className = "tileBody";
-
-          const name = document.createElement("div");
-          name.className = "tileName";
-          name.textContent = r.file;
-          body.appendChild(name);
-
-          const badges = document.createElement("div");
-          badges.className = "badges";
-
-          const bPred = document.createElement("span");
-          bPred.className = "badge pred";
-          bPred.textContent = `pred: ${r.top_label}`;
-          badges.appendChild(bPred);
-
-          const bMan = document.createElement("span");
-          bMan.className = "badge manual";
-          bMan.textContent = `manual: ${r.manual_label || "(empty)"}`;
-          badges.appendChild(bMan);
-
-          const changed = (r.manual_label || "") !== (r.top_label || "");
-          if (changed && (r.manual_label || "") !== "") {
-            const bCh = document.createElement("span");
-            bCh.className = "badge changed";
-            bCh.textContent = "changed";
-            badges.appendChild(bCh);
-          }
-
-          body.appendChild(badges);
-          tile.appendChild(body);
-
-          frag.appendChild(tile);
+        const changed = (r.manual_label || "") !== (r.top_label || "");
+        if (changed && (r.manual_label || "") !== "") {
+          const bCh = document.createElement("span");
+          bCh.className = "badge changed";
+          bCh.textContent = "changed";
+          badges.appendChild(bCh);
         }
 
-        el.appendChild(frag);
+        body.appendChild(badges);
+        tile.appendChild(body);
+
+        frag.appendChild(tile);
       }
 
-      function renderAll(scrollGrid = true) {
-        renderStats();
-        updatePositionPill(); // NEW
-        renderViewer();
-        renderGrid();
+      el.appendChild(frag);
+    }
 
-        if (scrollGrid) {
-          const grid = document.getElementById("grid");
-          const active = grid.querySelector(".tile.active");
-          if (active) {
-            const r = active.getBoundingClientRect();
-            const gr = grid.getBoundingClientRect();
-            if (r.top < gr.top || r.bottom > gr.bottom)
-              active.scrollIntoView({ block: "center" });
-          }
+    function renderAll(scrollGrid = true) {
+      renderStats();
+      updatePositionPill(); // NEW
+      renderViewer();
+      renderGrid();
+
+      if (scrollGrid) {
+        const grid = document.getElementById("grid");
+        const active = grid.querySelector(".tile.active");
+        if (active) {
+          const r = active.getBoundingClientRect();
+          const gr = grid.getBoundingClientRect();
+          if (r.top < gr.top || r.bottom > gr.bottom)
+            active.scrollIntoView({block: "center"});
         }
       }
+    }
 
-      function nextItem(dir) {
-        const idx = STATE.filteredIdx;
-        if (!idx.length) return;
-        const pos = idx.indexOf(STATE.activeIdx);
-        const nextPos = pos === -1 ? 0 : (pos + dir + idx.length) % idx.length;
-        STATE.activeIdx = idx[nextPos];
-        renderAll();
-      }
+    function nextItem(dir) {
+      const idx = STATE.filteredIdx;
+      if (!idx.length) return;
+      const pos = idx.indexOf(STATE.activeIdx);
+      const nextPos = pos === -1 ? 0 : (pos + dir + idx.length) % idx.length;
+      STATE.activeIdx = idx[nextPos];
+      renderAll();
+    }
 
-      function setManualPred() {
-        const r = STATE.rows[STATE.activeIdx];
-        if (!r) return;
-        r.manual_label = r.top_label || "";
-        renderAll(false);
-      }
+    function setManualPred() {
+      const r = STATE.rows[STATE.activeIdx];
+      if (!r) return;
+      r.manual_label = r.top_label || "";
+      renderAll(false);
+    }
 
-      function clearLabel() {
-        const r = STATE.rows[STATE.activeIdx];
-        if (!r) return;
-        r.manual_label = "";
-        renderAll(false);
-      }
+    function clearLabel() {
+      const r = STATE.rows[STATE.activeIdx];
+      if (!r) return;
+      r.manual_label = "";
+      renderAll(false);
+    }
 
-      function setLabelByIndex(oneBased) {
-        const r = STATE.rows[STATE.activeIdx];
-        if (!r) return;
-        const i = oneBased - 1;
-        if (i < 0 || i >= STATE.labels.length) return;
-        r.manual_label = STATE.labels[i];
-        renderAll(false);
-      }
+    function setLabelByIndex(oneBased) {
+      const r = STATE.rows[STATE.activeIdx];
+      if (!r) return;
+      const i = oneBased - 1;
+      if (i < 0 || i >= STATE.labels.length) return;
+      r.manual_label = STATE.labels[i];
+      renderAll(false);
+    }
 
-      async function main() {
-        const csvName = "{CSV_NAME}";
-        const predText = await fetch(csvName).then((r) => r.text());
+    async function main() {
+      const csvName = "{CSV_NAME}";
+      const predText = await fetch(csvName).then((r) => r.text());
 
-        const lines = predText.trim().split(/\r?\n/);
-        const head = parseCsvLine(lines.shift() || "");
-        const idx = Object.fromEntries(head.map((h, i) => [h, i]));
+      const lines = predText.trim().split(/\r?\n/);
+      const head = parseCsvLine(lines.shift() || "");
+      const idx = Object.fromEntries(head.map((h, i) => [h, i]));
 
-        const labels = head
-          .filter((h) => h.startsWith("p_"))
-          .map((h) => h.slice(2));
-        STATE.labels = labels;
+      const labels = head
+        .filter((h) => h.startsWith("p_"))
+        .map((h) => h.slice(2));
+      STATE.labels = labels;
 
-        const annText = await fetchTextIfExists("annotations.csv");
-        const annMap = new Map();
-        if (annText) {
-          const al = annText.trim().split(/\r?\n/);
-          const ah = parseCsvLine(al.shift() || "");
-          const aidx = Object.fromEntries(ah.map((h, i) => [h, i]));
-          for (const line of al) {
-            if (!line.trim()) continue;
-            const c = parseCsvLine(line);
-            const f = c[aidx["file"]];
-            const ml = c[aidx["manual_label"]] ?? "";
-            if (f) annMap.set(f, ml);
-          }
-        }
-
-        const rows = [];
-        for (const line of lines) {
+      const annText = await fetchTextIfExists("annotations.csv");
+      const annMap = new Map();
+      if (annText) {
+        const al = annText.trim().split(/\r?\n/);
+        const ah = parseCsvLine(al.shift() || "");
+        const aidx = Object.fromEntries(ah.map((h, i) => [h, i]));
+        for (const line of al) {
           if (!line.trim()) continue;
           const c = parseCsvLine(line);
-
-          const file = c[idx["file"]];
-          const topLabel = c[idx["top_label"]];
-          const topProb = Number(c[idx["top_prob"]]) || 0;
-
-          const probs = [];
-          for (const h of head) {
-            if (!h.startsWith("p_")) continue;
-            const lbl = h.slice(2);
-            const v = Number(c[idx[h]]) || 0;
-            probs.push({ label: lbl, value: v });
-          }
-          probs.sort((a, b) => b.value - a.value);
-
-          const manual = annMap.has(file) ? annMap.get(file) : topLabel || "";
-          rows.push({
-            file,
-            top_label: topLabel,
-            top_prob: topProb,
-            manual_label: manual,
-            probs,
-          });
+          const f = c[aidx["file"]];
+          const ml = c[aidx["manual_label"]] ?? "";
+          if (f) annMap.set(f, ml);
         }
+      }
 
-        STATE.rows = rows;
-        STATE.filteredIdx = rows.map((_, i) => i);
-        STATE.activeIdx = STATE.filteredIdx.length ? STATE.filteredIdx[0] : 0;
+      const rows = [];
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const c = parseCsvLine(line);
 
-        const filterManual = document.getElementById("filterManual");
-        const filterPred = document.getElementById("filterPred");
-        const uniqMan = new Set(rows.map((r) => r.manual_label || ""));
-        const uniqPred = new Set(rows.map((r) => r.top_label || ""));
+        const file = c[idx["file"]];
+        const topLabel = c[idx["top_label"]];
+        const topProb = Number(c[idx["top_prob"]]) || 0;
 
-        [...uniqMan]
-          .filter(Boolean)
-          .sort()
-          .forEach((v) => {
-            const o = document.createElement("option");
-            o.value = v;
-            o.textContent = v;
-            filterManual.appendChild(o);
-          });
-        [...uniqPred]
-          .filter(Boolean)
-          .sort()
-          .forEach((v) => {
-            const o = document.createElement("option");
-            o.value = v;
-            o.textContent = v;
-            filterPred.appendChild(o);
-          });
+        const probs = [];
+        for (const h of head) {
+          if (!h.startsWith("p_")) continue;
+          const lbl = h.slice(2);
+          const v = Number(c[idx[h]]) || 0;
+          probs.push({label: lbl, value: v});
+        }
+        probs.sort((a, b) => b.value - a.value);
 
-        document
-          .getElementById("search")
-          .addEventListener("input", applyFilters);
-        filterManual.addEventListener("change", applyFilters);
-        filterPred.addEventListener("change", applyFilters);
+        const manual = annMap.has(file) ? annMap.get(file) : topLabel || "";
+        rows.push({
+          file,
+          top_label: topLabel,
+          top_prob: topProb,
+          manual_label: manual,
+          probs,
+        });
+      }
 
-        document.getElementById("btnPrev").onclick = () => nextItem(-1);
-        document.getElementById("btnNext").onclick = () => nextItem(+1);
+      STATE.rows = rows;
+      STATE.filteredIdx = rows.map((_, i) => i);
+      STATE.activeIdx = STATE.filteredIdx.length ? STATE.filteredIdx[0] : 0;
 
-        document.getElementById("btnClear").onclick = () => clearLabel();
-        document.getElementById("btnSetPred").onclick = () => setManualPred();
-        document.getElementById("btnDownload").onclick = () => downloadCsv();
-        document.getElementById("btnSave").onclick = async () => {
+      const filterManual = document.getElementById("filterManual");
+      const filterPred = document.getElementById("filterPred");
+      const uniqMan = new Set(rows.map((r) => r.manual_label || ""));
+      const uniqPred = new Set(rows.map((r) => r.top_label || ""));
+
+      [...uniqMan]
+        .filter(Boolean)
+        .sort()
+        .forEach((v) => {
+          const o = document.createElement("option");
+          o.value = v;
+          o.textContent = v;
+          filterManual.appendChild(o);
+        });
+      [...uniqPred]
+        .filter(Boolean)
+        .sort()
+        .forEach((v) => {
+          const o = document.createElement("option");
+          o.value = v;
+          o.textContent = v;
+          filterPred.appendChild(o);
+        });
+
+      document
+        .getElementById("search")
+        .addEventListener("input", applyFilters);
+      filterManual.addEventListener("change", applyFilters);
+      filterPred.addEventListener("change", applyFilters);
+
+      document.getElementById("btnPrev").onclick = () => nextItem(-1);
+      document.getElementById("btnNext").onclick = () => nextItem(+1);
+
+      document.getElementById("btnClear").onclick = () => clearLabel();
+      document.getElementById("btnSetPred").onclick = () => setManualPred();
+      document.getElementById("btnDownload").onclick = () => downloadCsv();
+      document.getElementById("btnSave").onclick = async () => {
+        try {
+          await saveToServer();
+        } catch (e) {
+          alert(`Save failed: ${e}`);
+        }
+      };
+
+      document.getElementById("bigimg").onclick = () => {
+        const r = STATE.rows[STATE.activeIdx];
+        if (r) openZoomByFile(r.file);
+      };
+
+      document.getElementById("modalClose").onclick = closeZoom;
+      document.getElementById("modalImg").onclick = closeZoom;
+      document.getElementById("modal").onclick = (ev) => {
+        if (ev.target.id === "modal") closeZoom();
+      };
+
+      window.addEventListener("keydown", async (ev) => {
+        const tag =
+          ev.target && ev.target.tagName
+            ? ev.target.tagName.toLowerCase()
+            : "";
+        if (tag === "input" || tag === "select" || tag === "textarea") return;
+
+        if (ev.key === "ArrowLeft") {
+          ev.preventDefault();
+          nextItem(-1);
+        } else if (ev.key === "ArrowRight") {
+          ev.preventDefault();
+          nextItem(+1);
+        } else if (ev.key === "0") {
+          ev.preventDefault();
+          clearLabel();
+        } else if (/^[1-9]$/.test(ev.key)) {
+          ev.preventDefault();
+          setLabelByIndex(Number(ev.key));
+        } else if (ev.key === "s" || ev.key === "S") {
+          ev.preventDefault();
           try {
             await saveToServer();
           } catch (e) {
             alert(`Save failed: ${e}`);
           }
-        };
+        } else if (ev.key === "Escape") {
+          closeZoom();
+        }
+      });
 
-        document.getElementById("bigimg").onclick = () => {
-          const r = STATE.rows[STATE.activeIdx];
-          if (r) openZoomByFile(r.file);
-        };
+      renderAll();
+    }
 
-        document.getElementById("modalClose").onclick = closeZoom;
-        document.getElementById("modalImg").onclick = closeZoom;
-        document.getElementById("modal").onclick = (ev) => {
-          if (ev.target.id === "modal") closeZoom();
-        };
+    main();
+  </script>
+</body>
 
-        window.addEventListener("keydown", async (ev) => {
-          const tag =
-            ev.target && ev.target.tagName
-              ? ev.target.tagName.toLowerCase()
-              : "";
-          if (tag === "input" || tag === "select" || tag === "textarea") return;
-
-          if (ev.key === "ArrowLeft") {
-            ev.preventDefault();
-            nextItem(-1);
-          } else if (ev.key === "ArrowRight") {
-            ev.preventDefault();
-            nextItem(+1);
-          } else if (ev.key === "0") {
-            ev.preventDefault();
-            clearLabel();
-          } else if (/^[1-9]$/.test(ev.key)) {
-            ev.preventDefault();
-            setLabelByIndex(Number(ev.key));
-          } else if (ev.key === "s" || ev.key === "S") {
-            ev.preventDefault();
-            try {
-              await saveToServer();
-            } catch (e) {
-              alert(`Save failed: ${e}`);
-            }
-          } else if (ev.key === "Escape") {
-            closeZoom();
-          }
-        });
-
-        renderAll();
-      }
-
-      main();
-    </script>
-  </body>
 </html>

@@ -232,16 +232,35 @@ impl EyeballerRunner {
 
         w.flush()?;
 
-        // annotations.csv — создаём только если его ещё нет (чтобы не затирать твою ручную разметку)
+        // annotations.csv — создаём только если его ещё нет
+        // Формат one-hot:
+        // filename,<label1>,<label2>,...
+        // img.png,FALSE,TRUE,...
         let ann_path = out_dir.join("annotations.csv");
         if !ann_path.is_file() {
             let mut aw = Writer::from_path(&ann_path).with_context(|| {
                 format!("open annotations csv for write: {}", ann_path.display())
             })?;
-            aw.write_record(&["file", "manual_label"])?;
+
+            // header
+            let mut header: Vec<String> = Vec::with_capacity(1 + self.labels.0.len());
+            header.push("filename".to_string());
+            header.extend(self.labels.0.iter().cloned());
+            aw.write_record(&header)?;
+
             for (f, lbl) in initial_ann {
-                aw.write_record(&[f, lbl])?;
+                let mut rec: Vec<String> = Vec::with_capacity(1 + self.labels.0.len());
+                rec.push(f);
+                for l in &self.labels.0 {
+                    rec.push(if l == &lbl {
+                        "TRUE".into()
+                    } else {
+                        "FALSE".into()
+                    });
+                }
+                aw.write_record(&rec)?;
             }
+
             aw.flush()?;
         }
 
