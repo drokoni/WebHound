@@ -8,7 +8,7 @@ use ort::{
     value::Value,
     LoggingLevel,
 };
-use server::PREDICTION_REPORT_HTML;
+use server::write_prediction_report_html;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -16,7 +16,6 @@ use std::{
 };
 use walkdir::WalkDir;
 
-const IMG_EXTS: &[&str] = &[".png", ".jpg", ".jpeg", ".bmp", ".webp"];
 const INPUT_W: usize = 224;
 const INPUT_H: usize = 224;
 
@@ -38,6 +37,7 @@ impl Labels {
 pub struct EyeballerRunner {
     _env: Arc<Environment>,
     session: Session,
+    #[allow(dead_code)]
     input_name: String,
     labels: Labels,
 }
@@ -89,6 +89,13 @@ impl EyeballerRunner {
         v
     }
 
+    fn is_img_ext(ext: &str) -> bool {
+        matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "png" | "jpg" | "jpeg" | "bmp" | "webp"
+        )
+    }
+
     fn collect_images(&self, dir: &Path) -> Result<Vec<PathBuf>> {
         let mut files = Vec::new();
         for e in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
@@ -99,10 +106,7 @@ impl EyeballerRunner {
             let ok = p
                 .extension()
                 .and_then(|s| s.to_str())
-                .map(|s| {
-                    let low = s.to_ascii_lowercase();
-                    IMG_EXTS.iter().any(|&ext| ext == format!(".{}", low))
-                })
+                .map(Self::is_img_ext)
                 .unwrap_or(false);
             if ok {
                 files.push(p.to_path_buf());
@@ -115,7 +119,9 @@ impl EyeballerRunner {
         Ok(files)
     }
 
-    /// Прогон папки со скриншотами → CSV + HTML отчёт
+    /// Прогон папки со скриншотами → CSV + HTML отчёт.
+    /// ВАЖНО: чтобы не копировать скрины, отчёт пишем прямо в images_dir,
+    /// поэтому out_dir должен совпадать с images_dir.
     pub fn infer_to_csv_html(
         &self,
         images_dir: &Path,
@@ -123,14 +129,20 @@ impl EyeballerRunner {
         csv_name: &str,
         html_template: Option<&str>,
     ) -> Result<(PathBuf, PathBuf)> {
+        if out_dir != images_dir {
+            return Err(anyhow!(
+                "Чтобы не копировать скрины, out_dir должен быть равен images_dir (отчёт будет лежать рядом со скриншотами). \
+                 Передано: out_dir={}, images_dir={}",
+                out_dir.display(),
+                images_dir.display()
+            ));
+        }
+
         fs::create_dir_all(out_dir).with_context(|| format!("mkdir -p {}", out_dir.display()))?;
 
         let csv_path = out_dir.join(csv_name);
         let mut w = Writer::from_path(&csv_path)
             .with_context(|| format!("open csv for write: {}", csv_path.display()))?;
-
-        let images_out = out_dir.join("images");
-        fs::create_dir_all(&images_out)?;
 
         // заголовок CSV
         let mut header = vec!["file".into(), "top_label".into(), "top_prob".into()];
@@ -155,11 +167,7 @@ impl EyeballerRunner {
                 hwc[(y as usize, x as usize, 2)] = b as f32 / 255.0;
             }
 
-            //let chw: Array3<f32> = hwc.permuted_axes([2, 0, 1]).to_owned();
-            //let input_1chw: Array4<f32> = chw.insert_axis(Axis(0));
-            //let input_dyn = input_1chw.into_dyn();
-
-            // стало: NHWC -> (1, H, W, C)
+            // NHWC -> (1, H, W, C)
             let nhwc: Array4<f32> = hwc.insert_axis(Axis(0));
             let input_dyn = nhwc.into_dyn();
 
@@ -169,16 +177,10 @@ impl EyeballerRunner {
             let outputs = self.session.run(vec![input_tensor])?;
             let out = outputs[0].try_extract::<f32>()?;
 
-            let out_view = out.view();
-            let out2: ArrayView2<f32> = out_view
-                .clone()
+            let out2: ArrayView2<f32> = out
+                .view()
                 .into_dimensionality::<Ix2>()
                 .context("bad output rank")?;
-
-            //let out2: ArrayView2<f32> = out
-            //  .view()
-            //.into_dimensionality::<Ix2>()
-            //.context("bad output rank")?;
 
             let mut logits = vec![0.0_f32; ncls];
             for c in 0..ncls {
@@ -194,18 +196,12 @@ impl EyeballerRunner {
                 }
             }
 
-            let basename = p
-                .file_name()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "image.png".into());
-            let rel = PathBuf::from("images").join(&basename);
-            let target_path = images_out.join(&basename);
-            if !target_path.is_file() {
-                let _ = fs::copy(&p, &target_path);
-            }
+            // ВАЖНО: НЕ копируем файл. Пишем относительный путь внутри images_dir.
+            let rel = p.strip_prefix(images_dir).unwrap_or(&p);
+            let rel_str = rel.to_string_lossy().replace('\\', "/");
 
             let mut row = vec![
-                rel.to_string_lossy().to_string(),
+                rel_str,
                 self.labels
                     .0
                     .get(top_i)
@@ -221,15 +217,15 @@ impl EyeballerRunner {
 
         w.flush()?;
 
-        let html_path = out_dir.join("index.html");
-        let html_tpl = html_template
-            .map(|t| t.to_string())
-            .unwrap_or_else(|| PREDICTION_REPORT_HTML.to_string());
-        let html = html_tpl
-            .replace("{CSV_NAME}", csv_name)
-            .replace("{TITLE}", "Eyeballer ONNX Report");
+        // index.html рядом с CSV в images_dir/out_dir
+        let html_path = write_prediction_report_html(
+            out_dir,
+            csv_name,
+            images_dir,
+            html_template,
+            Some("Eyeballer ONNX Report"),
+        )?;
 
-        fs::write(&html_path, html)?;
         Ok((csv_path, html_path))
     }
 }
