@@ -4,3 +4,4 @@
 /temp
 .gitignore
 WebHound.zip
+.env

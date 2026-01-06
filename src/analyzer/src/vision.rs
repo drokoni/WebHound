@@ -177,8 +177,9 @@ impl EyeballerRunner {
             let outputs = self.session.run(vec![input_tensor])?;
             let out = outputs[0].try_extract::<f32>()?;
 
-            let out2: ArrayView2<f32> = out
-                .view()
+            let out_view = out.view();
+            let out2: ArrayView2<f32> = out_view
+                .clone()
                 .into_dimensionality::<Ix2>()
                 .context("bad output rank")?;
 
