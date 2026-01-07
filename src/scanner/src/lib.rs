@@ -3,6 +3,7 @@ pub mod crawler;
 pub mod net;
 pub mod postfilter;
 pub mod screenshot;
+pub mod sensitive_jsonl;
 
 use anyhow::Result;
 use core::utils::{extract_subdomains, read_urls};
@@ -48,7 +49,7 @@ impl Paths {
             subdomains_txt: base.join("subdomains.txt"),
             screenshots_dir,
             jsscripts_dir,
-            sensitive_info_txt: base.join("sensitive_info.txt"),
+            sensitive_info_txt: base.join("sensitive_info.jsonl"),
             assets_dir,
         })
     }

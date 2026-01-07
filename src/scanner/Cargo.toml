@@ -25,3 +25,4 @@ flate2 = { version = "1.0.0", default-features = true}
 bzip2 = "0.4"
 xz2 = "0.1"
 rand = "0.8"
+serde = {version = "1.0.228", features = ["derive"]}

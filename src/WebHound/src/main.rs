@@ -309,9 +309,11 @@ async fn main() -> Result<()> {
         Cmd::Assets { dir, out } => {
             let out_file = out.unwrap_or_else(|| {
                 if dir.file_name().and_then(|s| s.to_str()) == Some("assets") {
-                    dir.parent().unwrap_or(&dir).join("sensitive_info.post.txt")
+                    dir.parent()
+                        .unwrap_or(&dir)
+                        .join("sensitive_info.post.jsonl")
                 } else {
-                    dir.join("sensitive_info.post.txt")
+                    dir.join("sensitive_info.post.jsonl")
                 }
             });
 

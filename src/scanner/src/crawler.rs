@@ -1,5 +1,6 @@
 use crate::net::fetch_live_or_wayback;
 use crate::screenshot::make_screenshot_task;
+
 use core::analysis::PathsLike;
 use core::patterns::{scan_patterns, should_ignore_path, ScanHit};
 use core::utils::{sanitize_filename, save_bytes};
@@ -7,8 +8,9 @@ use core::utils::{sanitize_filename, save_bytes};
 use anyhow::Result as AnyResult;
 use reqwest::Client;
 use select::{document::Document, predicate::Attr};
+use serde::Serialize;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::File,
     io::Read,
     path::{Path, PathBuf},
@@ -93,7 +95,7 @@ async fn handle_response_for_url(
         handle_html_links(client, final_url, &text, paths, info_file).await;
     }
 
-    // скриншот
+    // скриншот (если хочешь — можно отключать флагом в CLI, но тут оставляем как есть)
     spawn_screenshot(final_url, paths);
 }
 
@@ -286,6 +288,233 @@ fn normalize_url(base: &Url, raw: &str) -> Option<String> {
     Some(u.to_string())
 }
 
+/* ===========================
+JSONL output (dataset-ready)
+=========================== */
+
+#[derive(Debug, Clone, Serialize)]
+struct JsonlSpan {
+    start: usize,  // char offset in "text"
+    end: usize,    // char offset in "text"
+    label: String, // PASSWORD/API_KEY/TOKEN/JWT/PRIVATE_KEY
+    rule_name: String,
+    value: String,
+    len: usize,
+    entropy_h: f64,
+    entropy_total_bits: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct JsonlRecord {
+    schema: u8,
+    kind: String, // "line" | "block"
+    path: String, // url или file://... или base_url!entry
+    line: Option<u32>,
+    text: String,
+    spans: Vec<JsonlSpan>,
+}
+
+fn label_from_rule(rule_name: &str) -> Option<&'static str> {
+    let r = rule_name.to_ascii_lowercase();
+
+    if r.contains("private key") {
+        return Some("PRIVATE_KEY");
+    }
+    if r.contains("json web token") || r.contains("jwt") {
+        return Some("JWT");
+    }
+    if r.contains("password") || r.contains("passphrase") || r.contains("парол") {
+        return Some("PASSWORD");
+    }
+    if r.contains("api key")
+        || r.contains("apikey")
+        || r.contains("client secret")
+        || r.contains("secret key")
+        || r.contains("access key")
+        || r.contains("credentials")
+    {
+        return Some("API_KEY");
+    }
+    if r.contains("token") || r.contains("bearer") {
+        return Some("TOKEN");
+    }
+
+    None
+}
+
+fn byte_to_char_idx(s: &str, byte_idx: usize) -> usize {
+    // byte_idx должен быть на границе UTF-8 (у нас так и есть, т.к. ищем подстроки в str)
+    s[..byte_idx].chars().count()
+}
+
+fn candidates_for_search(value: &str) -> Vec<String> {
+    vec![
+        value.to_string(),
+        format!("\"{}\"", value),
+        format!("'{}'", value),
+        format!("`{}`", value),
+    ]
+}
+
+/// Найти needle в text, начиная с `from`, не пересекась с used.
+fn find_next_nonoverlapping(
+    text: &str,
+    needle: &str,
+    mut from: usize,
+    used: &mut Vec<(usize, usize)>,
+) -> Option<(usize, usize)> {
+    if needle.is_empty() {
+        return None;
+    }
+
+    // ensure from is char boundary
+    if from > text.len() {
+        return None;
+    }
+    while from < text.len() && !text.is_char_boundary(from) {
+        from += 1;
+    }
+
+    while from <= text.len() {
+        let pos = text[from..].find(needle)?;
+        let s = from + pos;
+        let e = s + needle.len();
+
+        let overlaps = used.iter().any(|(us, ue)| s < *ue && e > *us);
+        if !overlaps {
+            used.push((s, e));
+            return Some((s, e));
+        }
+
+        from = s + 1;
+        while from < text.len() && !text.is_char_boundary(from) {
+            from += 1;
+        }
+    }
+    None
+}
+
+fn line_context(text: &str, start_b: usize, end_b: usize) -> (u32, &str, usize, usize) {
+    let line_start = text[..start_b].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let line_end = text[end_b..]
+        .find('\n')
+        .map(|i| end_b + i)
+        .unwrap_or(text.len());
+
+    let line_str = &text[line_start..line_end];
+    let line_no = (text[..line_start].bytes().filter(|&b| b == b'\n').count() as u32) + 1;
+
+    let rel_s_b = start_b - line_start;
+    let rel_e_b = end_b - line_start;
+
+    let rel_s_c = byte_to_char_idx(line_str, rel_s_b);
+    let rel_e_c = byte_to_char_idx(line_str, rel_e_b);
+
+    (line_no, line_str, rel_s_c, rel_e_c)
+}
+
+/// Превращает hits в JSONL записи:
+/// - block для PRIVATE_KEY (если value содержит BEGIN/END)
+/// - line для остальных (ищем value в тексте и вычисляем start/end)
+fn hits_to_jsonl_lines(path: &str, full_text: &str, hits: &[ScanHit]) -> Vec<String> {
+    let mut used_ranges: Vec<(usize, usize)> = Vec::new();
+
+    let mut by_line: HashMap<u32, (String, Vec<JsonlSpan>)> = HashMap::new();
+    let mut out_lines: Vec<String> = Vec::new();
+
+    for hit in hits {
+        let label = match label_from_rule(&hit.rule_name) {
+            Some(l) => l,
+            None => continue,
+        };
+
+        let h_r = (hit.entropy * 100.0).round() / 100.0;
+        let total_r = (hit.total_bits * 100.0).round() / 100.0;
+
+        // PRIVATE_KEY: часто многострочный — сохраняем block отдельно
+        if label == "PRIVATE_KEY" && hit.value.contains("BEGIN") && hit.value.contains("END") {
+            let text = hit.value.clone();
+            let text_len_chars = text.chars().count();
+
+            let span = JsonlSpan {
+                start: 0,
+                end: text_len_chars,
+                label: label.to_string(),
+                rule_name: hit.rule_name.clone(),
+                value: hit.value.clone(),
+                len: hit.len,
+                entropy_h: h_r,
+                entropy_total_bits: total_r,
+            };
+
+            let rec = JsonlRecord {
+                schema: 1,
+                kind: "block".to_string(),
+                path: path.to_string(),
+                line: None,
+                text,
+                spans: vec![span],
+            };
+
+            if let Ok(s) = serde_json::to_string(&rec) {
+                out_lines.push(s);
+            }
+            continue;
+        }
+
+        // line-level: ищем value в full_text
+        let mut found: Option<(usize, usize)> = None;
+        for cand in candidates_for_search(&hit.value) {
+            if let Some(r) = find_next_nonoverlapping(full_text, &cand, 0, &mut used_ranges) {
+                found = Some(r);
+                break;
+            }
+        }
+
+        let (s_b, e_b) = match found {
+            Some(v) => v,
+            None => continue,
+        };
+
+        let (line_no, line_str, s_c, e_c) = line_context(full_text, s_b, e_b);
+
+        let span = JsonlSpan {
+            start: s_c,
+            end: e_c,
+            label: label.to_string(),
+            rule_name: hit.rule_name.clone(),
+            value: hit.value.clone(),
+            len: hit.len,
+            entropy_h: h_r,
+            entropy_total_bits: total_r,
+        };
+
+        by_line
+            .entry(line_no)
+            .and_modify(|(_, spans)| spans.push(span.clone()))
+            .or_insert((line_str.to_string(), vec![span]));
+    }
+
+    // запись line-записей
+    for (line_no, (line_text, mut spans)) in by_line {
+        spans.sort_by_key(|s| s.start);
+
+        let rec = JsonlRecord {
+            schema: 1,
+            kind: "line".to_string(),
+            path: path.to_string(),
+            line: Some(line_no),
+            text: line_text,
+            spans,
+        };
+        if let Ok(s) = serde_json::to_string(&rec) {
+            out_lines.push(s);
+        }
+    }
+
+    out_lines
+}
+
 async fn analyze_bytes_with_rules(
     bytes: &[u8],
     url: &str,
@@ -307,17 +536,15 @@ async fn analyze_bytes_with_rules(
         return Ok(());
     }
 
+    let json_lines = hits_to_jsonl_lines(url, &text, &hits);
+    if json_lines.is_empty() {
+        return Ok(());
+    }
+
     use std::io::Write;
     let mut f = info_file.lock().await;
-    writeln!(f, "{url}")?;
-    for hit in hits {
-        let h_r = (hit.entropy * 100.0).round() / 100.0;
-        let total_r = (hit.total_bits * 100.0).round() / 100.0;
-        writeln!(
-            f,
-            "  - [{}] Найдено: {} | len={} | H≈{} bits/char | total≈{} bits",
-            hit.rule_name, hit.value, hit.len, h_r, total_r
-        )?;
+    for jl in json_lines {
+        writeln!(f, "{jl}")?;
     }
 
     Ok(())
@@ -351,50 +578,42 @@ async fn analyze_archive_file(
 ) -> AnyResult<()> {
     let archive_path = archive_path.to_path_buf();
     let assets_root = paths.assets_dir().to_path_buf();
-
     let base_for_spawn = base_url.to_string();
-    let base_for_log = base_url.to_string();
 
-    let hits = task::spawn_blocking(move || -> AnyResult<Vec<ScanHit>> {
+    // В blocking-потоке собираем сразу JSONL строки (чтобы не тащить async внутрь)
+    let json_lines = task::spawn_blocking(move || -> AnyResult<Vec<String>> {
         let ext = archive_path
             .extension()
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_ascii_lowercase();
 
-        let mut all_hits = Vec::new();
+        let mut out_json: Vec<String> = Vec::new();
 
         match ext.as_str() {
-            "zip" => analyze_zip(&archive_path, &base_for_spawn, &assets_root, &mut all_hits)?,
+            "zip" => analyze_zip(&archive_path, &base_for_spawn, &assets_root, &mut out_json)?,
             "tar" | "gz" | "tgz" | "bz2" | "xz" => analyze_tar_like(
                 &archive_path,
                 &base_for_spawn,
                 &assets_root,
                 &ext,
-                &mut all_hits,
+                &mut out_json,
             )?,
             _ => {}
         }
 
-        Ok(all_hits)
+        Ok(out_json)
     })
     .await??;
 
-    if hits.is_empty() {
+    if json_lines.is_empty() {
         return Ok(());
     }
 
     use std::io::Write;
     let mut f = info_file.lock().await;
-    writeln!(f, "{base_for_log} (архив)")?;
-    for hit in hits {
-        let h_r = (hit.entropy * 100.0).round() / 100.0;
-        let total_r = (hit.total_bits * 100.0).round() / 100.0;
-        writeln!(
-            f,
-            "  - [{}] Найдено: {} | len={} | H≈{} bits/char | total≈{} bits",
-            hit.rule_name, hit.value, hit.len, h_r, total_r
-        )?;
+    for jl in json_lines {
+        writeln!(f, "{jl}")?;
     }
 
     Ok(())
@@ -404,7 +623,7 @@ fn analyze_zip(
     path: &Path,
     base_url: &str,
     assets_root: &Path,
-    all_hits: &mut Vec<ScanHit>,
+    out_json: &mut Vec<String>,
 ) -> AnyResult<()> {
     let file = File::open(path)?;
     let mut zip = zip::ZipArchive::new(file)?;
@@ -437,7 +656,9 @@ fn analyze_zip(
         if is_probably_text(&data) {
             let text = String::from_utf8_lossy(&data);
             let hits = scan_patterns(&text);
-            all_hits.extend(hits);
+            if !hits.is_empty() {
+                out_json.extend(hits_to_jsonl_lines(&virt_url, &text, &hits));
+            }
         }
     }
 
@@ -449,7 +670,7 @@ fn analyze_tar_like(
     base_url: &str,
     assets_root: &Path,
     ext: &str,
-    all_hits: &mut Vec<ScanHit>,
+    out_json: &mut Vec<String>,
 ) -> AnyResult<()> {
     use bzip2::read::BzDecoder;
     use flate2::read::GzDecoder;
@@ -500,7 +721,9 @@ fn analyze_tar_like(
         if is_probably_text(&data) {
             let text = String::from_utf8_lossy(&data);
             let hits = scan_patterns(&text);
-            all_hits.extend(hits);
+            if !hits.is_empty() {
+                out_json.extend(hits_to_jsonl_lines(&virt_url, &text, &hits));
+            }
         }
     }
 

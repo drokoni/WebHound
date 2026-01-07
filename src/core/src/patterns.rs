@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 pub struct PatternSpec {
     pub re: Regex,
     pub name: String,
+    pub id: String,
     pub secret_group: Option<usize>,
 
     /// Минимальная Shannon entropy (bits/char) для секрета (как в gitleaks: entropy).
@@ -125,6 +126,7 @@ pub static PATTERNS: Lazy<Vec<PatternSpec>> = Lazy::new(|| {
             Ok(re) => {
                 out.push(PatternSpec {
                     re,
+                    id: r.id,
                     name: r.description,
                     secret_group: r.secret_group,
                     entropy: r.entropy,
@@ -139,6 +141,7 @@ pub static PATTERNS: Lazy<Vec<PatternSpec>> = Lazy::new(|| {
                     );
                     out.push(PatternSpec {
                         re,
+                        id: r.id,
                         name: format!("{} (lightweight)", r.description),
                         secret_group: Some(group_idx),
                         entropy: r.entropy,
