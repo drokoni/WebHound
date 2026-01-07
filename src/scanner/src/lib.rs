@@ -27,7 +27,6 @@ pub struct Paths {
     pub out_txt: PathBuf,
     pub subdomains_txt: PathBuf,
     pub screenshots_dir: PathBuf,
-    pub jsscripts_dir: PathBuf,
     pub sensitive_info_txt: PathBuf,
     pub assets_dir: PathBuf,
 }
@@ -36,11 +35,9 @@ impl Paths {
     pub fn new(domain: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let base = PathBuf::from(domain);
         let screenshots_dir = base.join("screenshots");
-        let jsscripts_dir = base.join("JSscripts");
         let assets_dir = base.join("assets");
 
         fs::create_dir_all(&screenshots_dir)?;
-        fs::create_dir_all(&jsscripts_dir)?;
         fs::create_dir_all(&assets_dir)?;
 
         Ok(Self {
@@ -48,7 +45,6 @@ impl Paths {
             out_txt: base.join("out.txt"),
             subdomains_txt: base.join("subdomains.txt"),
             screenshots_dir,
-            jsscripts_dir,
             sensitive_info_txt: base.join("sensitive_info.jsonl"),
             assets_dir,
         })
@@ -58,9 +54,6 @@ impl Paths {
 impl PathsLike for Paths {
     fn screenshots_dir(&self) -> &Path {
         &self.screenshots_dir
-    }
-    fn jsscripts_dir(&self) -> &Path {
-        &self.jsscripts_dir
     }
     fn assets_dir(&self) -> &Path {
         &self.assets_dir
