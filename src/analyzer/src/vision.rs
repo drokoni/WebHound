@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use csv::Writer;
 use image::imageops::FilterType;
+use image::io::Reader as ImageReader;
 use ndarray::{Array3, Array4, ArrayView2, Axis, CowArray, Ix2, IxDyn};
 use ort::{
     environment::Environment,
@@ -119,6 +120,20 @@ impl EyeballerRunner {
         Ok(files)
     }
 
+    /// Best-effort открытие изображения:
+    /// - определяем формат по сигнатуре (magic bytes), а не по расширению
+    /// - если файл битый / не-картинка — вернём Err (вызовущий код должен skip)
+    fn open_image_best_effort(&self, p: &Path) -> Result<image::DynamicImage> {
+        let reader = ImageReader::open(p)
+            .with_context(|| format!("open image file: {}", p.display()))?
+            .with_guessed_format()
+            .with_context(|| format!("guess image format: {}", p.display()))?;
+
+        reader
+            .decode()
+            .with_context(|| format!("decode image: {}", p.display()))
+    }
+
     /// Прогон папки со скриншотами → predictions.csv + index.html
     /// Дополнительно создаёт annotations.csv (если его ещё нет):
     ///   file,manual_label
@@ -160,11 +175,25 @@ impl EyeballerRunner {
         let files = self.collect_images(images_dir)?;
         let ncls = self.labels.0.len();
 
-        // Стартовая разметка: file -> predicted label
-        let mut initial_ann: Vec<(String, String)> = Vec::with_capacity(files.len());
+        // Стартовая разметка: file -> predicted label (только для успешно обработанных)
+        let mut initial_ann: Vec<(String, String)> = Vec::new();
+
+        // Список пропущенных файлов (битые/не-картинки)
+        let mut skipped: Vec<(PathBuf, String)> = Vec::new();
+
+        let mut processed = 0usize;
 
         for p in files {
-            let img = image::open(&p).with_context(|| format!("open image: {}", p.display()))?;
+            // --- ВАЖНО: НЕ ПАДАЕМ НА БИТОМ ФАЙЛЕ, А SKIP ---
+            let img = match self.open_image_best_effort(&p) {
+                Ok(img) => img,
+                Err(e) => {
+                    eprintln!("[warn] skip {}: {:#}", p.display(), e);
+                    skipped.push((p.clone(), format!("{:#}", e)));
+                    continue;
+                }
+            };
+
             let img = img.resize_exact(INPUT_W as u32, INPUT_H as u32, FilterType::Triangle);
             let rgb = img.to_rgb8();
 
@@ -228,9 +257,43 @@ impl EyeballerRunner {
 
             // initial annotation
             initial_ann.push((rel_str, top_label));
+
+            processed += 1;
         }
 
         w.flush()?;
+
+        // Если вообще ничего не обработали — это не "успех"
+        if processed == 0 {
+            // чтобы было видно почему, сохраняем skipped_images.tsv
+            if !skipped.is_empty() {
+                let mut out = String::new();
+                for (p, err) in &skipped {
+                    let one_line = err.replace(['\n', '\r'], " ");
+                    out.push_str(&format!("{}\t{}\n", p.display(), one_line));
+                }
+                let _ = fs::write(out_dir.join("skipped_images.tsv"), out);
+            }
+            return Err(anyhow!(
+                "Не удалось декодировать ни одного изображения из {} (все файлы оказались битые/не-картинки).",
+                images_dir.display()
+            ));
+        }
+
+        // Сохраняем список пропусков (если были)
+        if !skipped.is_empty() {
+            let mut out = String::new();
+            for (p, err) in &skipped {
+                let one_line = err.replace(['\n', '\r'], " ");
+                out.push_str(&format!("{}\t{}\n", p.display(), one_line));
+            }
+            let _ = fs::write(out_dir.join("skipped_images.tsv"), out);
+            eprintln!(
+                "[warn] skipped {} files (see {}/skipped_images.tsv)",
+                skipped.len(),
+                out_dir.display()
+            );
+        }
 
         // annotations.csv — создаём только если его ещё нет
         // Формат one-hot:
@@ -275,3 +338,4 @@ impl EyeballerRunner {
         Ok((csv_path, html_path))
     }
 }
+
