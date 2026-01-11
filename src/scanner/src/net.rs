@@ -202,7 +202,7 @@ pub async fn fetch_wayback_urls(client: &Client, domain: &str) -> AnyResult<Stri
 pub async fn fetch_wayback_urls_resilient(
     client: &Client,
     domain: &str,
-    mut opts: CdxDomainOpts,
+    opts: CdxDomainOpts,
 ) -> AnyResult<String> {
     let host = normalize_host(domain);
     let ua = "curl/8.4.0";

@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
 use std::{
     fs,
-    io::Read,
     path::{Path, PathBuf},
 };
 
