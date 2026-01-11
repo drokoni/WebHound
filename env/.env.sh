@@ -74,17 +74,15 @@ main() {
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local start_dir="${PWD}"
 
-    # Можно явно указать корень через WEBHOUND_ROOT
     if [[ "${WEBHOUND_ROOT:-}" != "" ]]; then
         start_dir="$(abspath "$WEBHOUND_ROOT")"
     fi
 
     local found
     if ! found="$(find_repo_root_and_lib "$start_dir")"; then
-        # попробуем от директории скрипта
         if ! found="$(find_repo_root_and_lib "$script_dir")"; then
-            echo "❌ Не нашёл libonnxruntime.so* в LibPy."
-            echo "   Запусти из корня проекта или задай WEBHOUND_ROOT=/path/to/WebHound"
+            echo "Не нашёл libonnxruntime.so* в LibPy."
+            echo "Запусти из корня проекта или задай WEBHOUND_ROOT=/path/to/WebHound"
             exit 1
         fi
     fi
@@ -105,7 +103,7 @@ export ORT_DYLIB_PATH="${lib_abs}"
 export LD_LIBRARY_PATH="${lib_dir_abs}:\${LD_LIBRARY_PATH}"
 EOF
 
-    echo "✅ Создан: $out"
+    echo "Создан: $out"
     echo "   ORT_DYLIB_PATH=$lib_abs"
     echo "   LD_LIBRARY_PATH добавит: $lib_dir_abs"
     echo ""

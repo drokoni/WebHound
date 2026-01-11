@@ -68,7 +68,7 @@ enum Cmd {
         out: Option<PathBuf>,
     },
 
-    /// Запустить скан (CDX устойчивый + опциональный анализ)
+    /// Запустить скан 
     Scan {
         #[arg(value_name = "TARGET")]
         target: String,
