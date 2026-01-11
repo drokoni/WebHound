@@ -111,6 +111,39 @@
       background: rgba(255, 255, 255, 0.03);
     }
 
+    /* tabs */
+    .tabs {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .tabBtn {
+      padding: 9px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 13px;
+      user-select: none;
+    }
+
+    .tabBtn.active {
+      background: rgba(106, 169, 255, 0.16);
+      border-color: rgba(106, 169, 255, 0.3);
+    }
+
+    .tabPane {
+      display: none;
+    }
+
+    .tabPane.active {
+      display: block;
+    }
+
     .controls {
       margin-top: 12px;
       display: grid;
@@ -123,6 +156,7 @@
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
+      align-items: center;
     }
 
     input,
@@ -535,12 +569,94 @@
       cursor: pointer;
       font-size: 12px;
     }
+
+    /* JSONL table */
+    table.tbl {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .tbl th,
+    .tbl td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 10px;
+      vertical-align: top;
+      font-size: 12px;
+    }
+
+    .tbl th {
+      position: sticky;
+      top: 0;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      text-align: left;
+      cursor: pointer;
+      user-select: none;
+      z-index: 5;
+    }
+
+    .tbl tr:hover td {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .mono {
+      font-family: var(--mono);
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .hl {
+      background: rgba(255, 204, 102, 0.2);
+      border: 1px solid rgba(255, 204, 102, 0.3);
+      border-radius: 6px;
+      padding: 1px 4px;
+    }
+
+    .jsonlLayout {
+      padding: 14px;
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 14px;
+      align-items: start;
+    }
+
+    @media (max-width: 980px) {
+      .jsonlLayout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .scrollBox {
+      max-height: 70vh;
+      overflow: auto;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    pre.code {
+      margin: 0;
+      padding: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--text);
+    }
   </style>
 </head>
 
 <body>
   <div class="app">
-    <div class="card" id="viewerCard">
+    <div class="card">
       <div class="top">
         <h1>WebHound report</h1>
         <div class="meta">
@@ -551,82 +667,196 @@
           </div>
         </div>
 
-        <div class="controls">
-          <input id="search" class="row" type="text" placeholder="Search filename…" />
-          <select id="filterManual">
-            <option value="">manual contains: (all)</option>
-          </select>
-          <select id="filterPred">
-            <option value="">pred: (all)</option>
-          </select>
-
-          <div class="row">
-            <button id="btnPrev" class="btn-ghost">← Prev</button>
-            <button id="btnNext" class="btn-ghost">Next →</button>
-            <button id="btnSave" class="btn-good">Save</button>
-            <button id="btnDownload" class="btn-ghost">Download</button>
-            <button id="btnSetPred" class="btn-ghost">manual = {pred}</button>
-            <button id="btnClear" class="btn-danger">Clear</button>
-          </div>
-
-          <div class="pillrow">
-            <span class="pill" id="countPill">0/0</span>
-            <span class="pill" id="shownPill">shown: 0/0</span>
-            <span class="pill" id="changedPill">changed: 0</span>
-            <span class="pill warn">
-              keys: <span class="kbd">←</span><span class="kbd">→</span>
-              <span class="kbd">1..9</span> (toggle)
-              <span class="kbd">0</span> clear <span class="kbd">S</span> save
-              <span class="kbd">Esc</span>
-            </span>
-            <span class="pill good" id="savedPill" style="display: none">saved</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="head">
-        <div class="fileInfo" id="fileInfo"></div>
-      </div>
-
-      <div class="viewer">
-        <div class="imgWrap">
-          <img id="bigimg" class="bigimg" alt="preview" />
-          <div class="imgHint">Click to zoom</div>
-        </div>
-
-        <div>
-          <div class="section">
-            <h3>Labels (multi)</h3>
-            <div class="kv" style="margin-bottom: 10px">
-              <div class="k">Pred</div>
-              <div class="v" id="predLabel"></div>
-
-              <div class="k">Prob</div>
-              <div class="v" id="predProb"></div>
-            </div>
-
-            <div class="manualChecks" id="manualChecks"></div>
-          </div>
-
-          <div class="section">
-            <h3>All probabilities</h3>
-            <div class="probs" id="probs"></div>
-          </div>
+        <div class="tabs">
+          <button class="tabBtn active" data-tab="screens">Screens</button>
+          <button class="tabBtn" data-tab="jsonl">JSONL</button>
         </div>
       </div>
     </div>
 
-    <div class="card" id="thumbsCard">
-      <div class="gridTop">
-        <div class="gridTitle">
-          Thumbnails (click to select · click image to zoom)
+    <!-- SCREENS TAB -->
+    <div class="tabPane active" id="tab-screens">
+      <div class="card" id="viewerCard">
+        <div class="top">
+          <div class="controls">
+            <input id="search" class="row" type="text" placeholder="Search filename…" />
+            <select id="filterManual">
+              <option value="">manual contains: (all)</option>
+            </select>
+            <select id="filterPred">
+              <option value="">pred: (all)</option>
+            </select>
+
+            <div class="row">
+              <button id="btnPrev" class="btn-ghost">← Prev</button>
+              <button id="btnNext" class="btn-ghost">Next →</button>
+              <button id="btnSave" class="btn-good">Save</button>
+              <button id="btnDownload" class="btn-ghost">Download</button>
+              <button id="btnSetPred" class="btn-ghost">
+                manual = {pred}
+              </button>
+              <button id="btnClear" class="btn-danger">Clear</button>
+            </div>
+
+            <div class="pillrow">
+              <span class="pill" id="countPill">0/0</span>
+              <span class="pill" id="shownPill">shown: 0/0</span>
+              <span class="pill" id="changedPill">changed: 0</span>
+              <span class="pill warn">
+                keys: <span class="kbd">←</span><span class="kbd">→</span>
+                <span class="kbd">1..9</span> (toggle)
+                <span class="kbd">0</span> clear
+                <span class="kbd">S</span> save
+                <span class="kbd">Esc</span>
+              </span>
+              <span class="pill good" id="savedPill" style="display: none">saved</span>
+            </div>
+          </div>
         </div>
-        <div class="pill">auto-scroll only if grid visible</div>
+
+        <div class="head">
+          <div class="fileInfo" id="fileInfo"></div>
+        </div>
+
+        <div class="viewer">
+          <div class="imgWrap">
+            <img id="bigimg" class="bigimg" alt="preview" />
+            <div class="imgHint">Click to zoom</div>
+          </div>
+
+          <div>
+            <div class="section">
+              <h3>Labels (multi)</h3>
+              <div class="kv" style="margin-bottom: 10px">
+                <div class="k">Pred</div>
+                <div class="v" id="predLabel"></div>
+
+                <div class="k">Prob</div>
+                <div class="v" id="predProb"></div>
+              </div>
+
+              <div class="manualChecks" id="manualChecks"></div>
+            </div>
+
+            <div class="section">
+              <h3>All probabilities</h3>
+              <div class="probs" id="probs"></div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="grid" id="grid"></div>
+
+      <div class="card" id="thumbsCard">
+        <div class="gridTop">
+          <div class="gridTitle">
+            Thumbnails (click to select · click image to zoom)
+          </div>
+          <div class="pill">auto-scroll only if grid visible</div>
+        </div>
+        <div class="grid" id="grid"></div>
+      </div>
+    </div>
+
+    <!-- JSONL TAB -->
+    <div class="tabPane" id="tab-jsonl">
+      <div class="card" id="jsonlCard">
+        <div class="top">
+          <h1 style="margin-bottom: 6px">JSONL findings</h1>
+          <div class="meta">
+            Читает NDJSON/JSONL через <code>/api/jsonl?file=...</code> и
+            сортирует по <code>rule_name</code>.
+          </div>
+
+          <div class="controls">
+            <input id="jsonlPath" class="row" type="text"
+              placeholder="Path to jsonl (e.g. ../../sensitive_info.post.jsonl)" />
+            <select id="jsonlFilterRule">
+              <option value="">rule_name: (all)</option>
+            </select>
+            <select id="jsonlFilterLabel">
+              <option value="">label: (all)</option>
+            </select>
+
+            <div class="row">
+              <button id="jsonlLoad" class="btn-good">Load</button>
+              <button id="jsonlClear" class="btn-danger">Clear</button>
+              <input id="jsonlSearch" type="text" placeholder="Search value/path/text…"
+                style="flex: 1; min-width: 240px" />
+            </div>
+
+            <div class="pillrow">
+              <span class="pill" id="jsonlCountPill">0</span>
+              <span class="pill" id="jsonlShownPill">shown: 0</span>
+              <span class="pill warn" id="jsonlStatusPill">idle</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="jsonlLayout">
+          <div class="scrollBox">
+            <table class="tbl" id="jsonlTable">
+              <thead>
+                <tr>
+                  <th data-col="rule_name">rule_name</th>
+                  <th data-col="label">label</th>
+                  <th data-col="value">value</th>
+                  <th data-col="path">path</th>
+                  <th data-col="line">line</th>
+                </tr>
+              </thead>
+              <tbody id="jsonlTbody"></tbody>
+            </table>
+          </div>
+
+          <div>
+            <div class="section">
+              <h3>Selected</h3>
+              <div class="kv">
+                <div class="k">Label</div>
+                <div class="v" id="jsonlSelLabel">-</div>
+
+                <div class="k">Value</div>
+                <div class="v" id="jsonlSelValue">-</div>
+
+                <div class="k">Rule</div>
+                <div class="v" id="jsonlSelRule">-</div>
+
+                <div class="k">Path</div>
+                <div class="v" id="jsonlSelPath">-</div>
+
+                <div class="k">Line</div>
+                <div class="v" id="jsonlSelLine">-</div>
+              </div>
+
+              <div style="
+                    margin-top: 10px;
+                    display: flex;
+                    gap: 10px;
+                    flex-wrap: wrap;
+                  ">
+                <button id="jsonlOpenPath" class="btn-ghost">
+                  Open (if possible)
+                </button>
+                <button id="jsonlCopyValue" class="btn-ghost">
+                  Copy value
+                </button>
+                <button id="jsonlCopyPath" class="btn-ghost">
+                  Copy path
+                </button>
+              </div>
+            </div>
+
+            <div class="section">
+              <h3>Text (highlight span)</h3>
+              <pre class="code" id="jsonlSelText">(select a row)</pre>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
+  <!-- ZOOM MODAL (for screens) -->
   <div class="modal" id="modal">
     <div class="inner">
       <button class="close" id="modalClose">Esc / click image</button>
@@ -635,8 +865,27 @@
   </div>
 
   <script>
-    const STATE = {rows: [], labels: [], filteredIdx: [], activeIdx: 0};
+    // ---------------- tabs ----------------
+    function setTab(name) {
+      document.querySelectorAll(".tabBtn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.tab === name);
+      });
+      document
+        .getElementById("tab-screens")
+        .classList.toggle("active", name === "screens");
+      document
+        .getElementById("tab-jsonl")
+        .classList.toggle("active", name === "jsonl");
+      localStorage.setItem("wh_tab", name);
+    }
 
+    document.querySelectorAll(".tabBtn").forEach((b) => {
+      b.addEventListener("click", () => setTab(b.dataset.tab));
+    });
+
+    setTab(localStorage.getItem("wh_tab") || "screens");
+
+    // ---------------- shared helpers ----------------
     function parseCsvLine(line) {
       const out = [];
       let cur = "";
@@ -677,6 +926,9 @@
       if (!r.ok) return null;
       return await r.text();
     }
+
+    // ---------------- SCREENS ----------------
+    const STATE = {rows: [], labels: [], filteredIdx: [], activeIdx: 0};
 
     function showSaved(msg) {
       const el = document.getElementById("savedPill");
@@ -778,11 +1030,9 @@
       const shown = STATE.filteredIdx.length;
       const pos = shown ? STATE.filteredIdx.indexOf(STATE.activeIdx) + 1 : 0;
 
-      const countEl = document.getElementById("countPill");
-      if (countEl) countEl.textContent = `${pos}/${shown}`;
-
-      const shownEl = document.getElementById("shownPill");
-      if (shownEl) shownEl.textContent = `shown: ${shown}/${totalAll}`;
+      document.getElementById("countPill").textContent = `${pos}/${shown}`;
+      document.getElementById("shownPill").textContent =
+        `shown: ${shown}/${totalAll}`;
 
       let changed = 0;
       for (const r of STATE.rows) {
@@ -793,8 +1043,8 @@
           (pred !== "" && set.size === 1 && set.has(pred));
         if (!isSame) changed++;
       }
-      const chEl = document.getElementById("changedPill");
-      if (chEl) chEl.textContent = `changed: ${changed}`;
+      document.getElementById("changedPill").textContent =
+        `changed: ${changed}`;
     }
 
     function renderViewer() {
@@ -949,7 +1199,6 @@
       renderViewer();
       renderGrid();
 
-      // autoscroll ONLY if thumbsCard is visible
       if (scrollGrid) {
         const thumbs = document.getElementById("thumbsCard");
         if (isElementVisible(thumbs, 80)) {
@@ -966,7 +1215,7 @@
       const pos = idx.indexOf(STATE.activeIdx);
       const nextPos = pos === -1 ? 0 : (pos + dir + idx.length) % idx.length;
       STATE.activeIdx = idx[nextPos];
-      renderAll();
+      renderAll(false);
     }
 
     function setManualPred() {
@@ -997,7 +1246,7 @@
       renderAll(false);
     }
 
-    async function main() {
+    async function initScreens() {
       const csvName = "{CSV_NAME}";
       const predText = await fetch(csvName).then((r) => r.text());
 
@@ -1176,7 +1425,346 @@
       renderAll();
     }
 
-    main();
+    // ---------------- JSONL ----------------
+    const JSONL = {
+      items: [],
+      filtered: [],
+      sort: {col: "rule_name", dir: "asc"},
+      active: null,
+      ruleSet: new Set(),
+      labelSet: new Set(),
+      relCache: new Map(),
+    };
+
+    function setJsonlStatus(s) {
+      const el = document.getElementById("jsonlStatusPill");
+      el.textContent = s;
+    }
+
+    function shortPath(p, maxLen = 80) {
+      const s = String(p || "");
+      if (s.length <= maxLen) return s;
+      return "…" + s.slice(s.length - maxLen);
+    }
+
+    function normalizeJsonlEntry(obj) {
+      // Sometimes obj.text is a JSON string of the real finding
+      let inner = null;
+      if (obj && typeof obj.text === "string") {
+        const t = obj.text.trim();
+        if (t.startsWith("{") && t.endsWith("}")) {
+          try {
+            inner = JSON.parse(t);
+          } catch { }
+        }
+      }
+      const src = inner && inner.spans && inner.text ? inner : obj;
+      return {
+        path: src.path ?? obj.path ?? "",
+        line: src.line ?? obj.line ?? null,
+        text: src.text ?? "",
+        spans: Array.isArray(src.spans)
+          ? src.spans
+          : Array.isArray(obj.spans)
+            ? obj.spans
+            : [],
+      };
+    }
+
+    function jsonlApplyFilters() {
+      const fr = document.getElementById("jsonlFilterRule").value;
+      const fl = document.getElementById("jsonlFilterLabel").value;
+      const q = document
+        .getElementById("jsonlSearch")
+        .value.trim()
+        .toLowerCase();
+
+      let arr = JSONL.items;
+      if (fr) arr = arr.filter((x) => x.rule_name === fr);
+      if (fl) arr = arr.filter((x) => x.label === fl);
+      if (q) {
+        arr = arr.filter(
+          (x) =>
+            String(x.value).toLowerCase().includes(q) ||
+            String(x.path).toLowerCase().includes(q) ||
+            String(x.text).toLowerCase().includes(q),
+        );
+      }
+
+      // sort
+      const {col, dir} = JSONL.sort;
+      arr = [...arr].sort((a, b) => {
+        let av = a[col],
+          bv = b[col];
+        if (
+          col === "line" ||
+          col === "entropy_h" ||
+          col === "entropy_total_bits"
+        ) {
+          av = Number(av) || 0;
+          bv = Number(bv) || 0;
+          return dir === "asc" ? av - bv : bv - av;
+        }
+        return dir === "asc"
+          ? String(av).localeCompare(String(bv))
+          : String(bv).localeCompare(String(av));
+      });
+
+      JSONL.filtered = arr;
+      document.getElementById("jsonlCountPill").textContent =
+        `${JSONL.items.length}`;
+      document.getElementById("jsonlShownPill").textContent =
+        `shown: ${JSONL.filtered.length}`;
+
+      jsonlRenderTable();
+      if (!JSONL.active && JSONL.filtered.length) {
+        JSONL.active = JSONL.filtered[0];
+      }
+      jsonlRenderSelected();
+    }
+
+    function jsonlRenderTable() {
+      const tb = document.getElementById("jsonlTbody");
+      tb.innerHTML = "";
+
+      const frag = document.createDocumentFragment();
+      const maxRows = Math.min(JSONL.filtered.length, 2000); // keep UI responsive
+      for (let i = 0; i < maxRows; i++) {
+        const it = JSONL.filtered[i];
+        const tr = document.createElement("tr");
+        tr.style.cursor = "pointer";
+        if (JSONL.active && JSONL.active.__id === it.__id) {
+          tr.style.background = "rgba(106,169,255,0.10)";
+        }
+        tr.onclick = () => {
+          JSONL.active = it;
+          jsonlRenderSelected();
+          jsonlRenderTable();
+        };
+
+        tr.innerHTML = `
+          <td>${it.rule_name}</td>
+          <td class="mono">${it.label}</td>
+          <td class="mono">${it.value}</td>
+          <td class="mono">${shortPath(it.path)}</td>
+          <td class="mono">${it.line ?? ""}</td>
+        `;
+        frag.appendChild(tr);
+      }
+
+      tb.appendChild(frag);
+    }
+
+    function highlightText(text, start, end) {
+      const s = String(text || "");
+      if (typeof start !== "number" || typeof end !== "number") return s;
+      if (start < 0 || end > s.length || end <= start) return s;
+      const a = s.slice(0, start);
+      const b = s.slice(start, end);
+      const c = s.slice(end);
+      return `${a}<span class="hl">${b}</span>${c}`;
+    }
+
+    async function getRelForAbs(absPath) {
+      if (!absPath) return null;
+      if (JSONL.relCache.has(absPath)) return JSONL.relCache.get(absPath);
+
+      const r = await fetch(
+        `/api/relpath?abs=${encodeURIComponent(absPath)}`,
+      );
+      if (!r.ok) {
+        JSONL.relCache.set(absPath, null);
+        return null;
+      }
+      let j = null;
+      try {
+        j = await r.json();
+      } catch { }
+      const rel = j && j.ok && j.rel ? j.rel : null;
+      JSONL.relCache.set(absPath, rel);
+      return rel;
+    }
+
+    function jsonlRenderSelected() {
+      const it = JSONL.active;
+      const elLabel = document.getElementById("jsonlSelLabel");
+      const elValue = document.getElementById("jsonlSelValue");
+      const elRule = document.getElementById("jsonlSelRule");
+      const elPath = document.getElementById("jsonlSelPath");
+      const elLine = document.getElementById("jsonlSelLine");
+      const elText = document.getElementById("jsonlSelText");
+
+      if (!it) {
+        elLabel.textContent = "-";
+        elValue.textContent = "-";
+        elRule.textContent = "-";
+        elPath.textContent = "-";
+        elLine.textContent = "-";
+        elText.textContent = "(select a row)";
+        return;
+      }
+
+      elLabel.textContent = it.label || "-";
+      elValue.textContent = it.value || "-";
+      elRule.textContent = it.rule_name || "-";
+      elPath.textContent = it.path || "-";
+      elLine.textContent = it.line ?? "-";
+
+      // render text with highlight
+      const html = highlightText(it.text, it.start, it.end);
+      elText.innerHTML = html;
+
+      document.getElementById("jsonlCopyValue").onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(String(it.value || ""));
+        } catch {
+          alert("Copy failed");
+        }
+      };
+
+      document.getElementById("jsonlCopyPath").onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(String(it.path || ""));
+        } catch {
+          alert("Copy failed");
+        }
+      };
+
+      document.getElementById("jsonlOpenPath").onclick = async () => {
+        const abs = String(it.path || "");
+        if (!abs) return;
+        const rel = await getRelForAbs(abs);
+        if (rel) {
+          window.open(encodeURI(rel), "_blank", "noopener");
+        } else {
+          alert(
+            "Can't map this path to server roots.\nTry moving html files under report parent/grandparent, or open via filesystem.",
+          );
+        }
+      };
+    }
+
+    async function jsonlLoad() {
+      const p = document.getElementById("jsonlPath").value.trim();
+      if (!p) return;
+      localStorage.setItem("wh_jsonl_path", p);
+
+      setJsonlStatus("loading…");
+      JSONL.items = [];
+      JSONL.filtered = [];
+      JSONL.active = null;
+      JSONL.ruleSet = new Set();
+      JSONL.labelSet = new Set();
+
+      // fetch via API (server searches in roots)
+      const r = await fetch(`/api/jsonl?file=${encodeURIComponent(p)}`);
+      if (!r.ok) {
+        setJsonlStatus(`HTTP ${r.status}`);
+        alert(`JSONL load failed: HTTP ${r.status}`);
+        return;
+      }
+
+      const text = await r.text();
+      const lines = text.split(/\r?\n/).filter((l) => l.trim().length);
+
+      let id = 0;
+      for (const line of lines) {
+        let obj = null;
+        try {
+          obj = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        const base = normalizeJsonlEntry(obj);
+
+        const spans = Array.isArray(base.spans) ? base.spans : [];
+        for (const s of spans) {
+          const item = {
+            __id: ++id,
+            rule_name: s.rule_name || "",
+            label: s.label || "",
+            value: s.value || "",
+            entropy_h: s.entropy_h ?? null,
+            entropy_total_bits: s.entropy_total_bits ?? null,
+            path: base.path || "",
+            line: base.line,
+            text: base.text || "",
+            start: s.start,
+            end: s.end,
+          };
+          JSONL.items.push(item);
+          if (item.rule_name) JSONL.ruleSet.add(item.rule_name);
+          if (item.label) JSONL.labelSet.add(item.label);
+        }
+      }
+
+      // fill filters
+      const selRule = document.getElementById("jsonlFilterRule");
+      const selLabel = document.getElementById("jsonlFilterLabel");
+      selRule.innerHTML = `<option value="">rule_name: (all)</option>`;
+      selLabel.innerHTML = `<option value="">label: (all)</option>`;
+
+      [...JSONL.ruleSet].sort().forEach((v) => {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = v;
+        selRule.appendChild(o);
+      });
+
+      [...JSONL.labelSet].sort().forEach((v) => {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = v;
+        selLabel.appendChild(o);
+      });
+
+      setJsonlStatus(`loaded: ${JSONL.items.length}`);
+      jsonlApplyFilters();
+    }
+
+    function jsonlClear() {
+      JSONL.items = [];
+      JSONL.filtered = [];
+      JSONL.active = null;
+      document.getElementById("jsonlTbody").innerHTML = "";
+      document.getElementById("jsonlCountPill").textContent = "0";
+      document.getElementById("jsonlShownPill").textContent = "shown: 0";
+      setJsonlStatus("cleared");
+      jsonlRenderSelected();
+    }
+
+    // sort table by clicking header
+    document
+      .getElementById("jsonlTable")
+      .querySelector("thead")
+      .addEventListener("click", (ev) => {
+        const th = ev.target.closest("th");
+        if (!th) return;
+        const col = th.dataset.col;
+        if (!col) return;
+
+        if (JSONL.sort.col === col) {
+          JSONL.sort.dir = JSONL.sort.dir === "asc" ? "desc" : "asc";
+        } else {
+          JSONL.sort.col = col;
+          JSONL.sort.dir = "asc";
+        }
+        jsonlApplyFilters();
+      });
+
+    document.getElementById("jsonlLoad").onclick = jsonlLoad;
+    document.getElementById("jsonlClear").onclick = jsonlClear;
+    document.getElementById("jsonlFilterRule").onchange = jsonlApplyFilters;
+    document.getElementById("jsonlFilterLabel").onchange = jsonlApplyFilters;
+    document.getElementById("jsonlSearch").oninput = jsonlApplyFilters;
+
+    // default jsonl path
+    document.getElementById("jsonlPath").value =
+      localStorage.getItem("wh_jsonl_path") ||
+      "../../sensitive_info.post.jsonl";
+
+    // init screens
+    initScreens();
   </script>
 </body>
 

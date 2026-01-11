@@ -338,4 +338,3 @@ impl EyeballerRunner {
         Ok((csv_path, html_path))
     }
 }
-
