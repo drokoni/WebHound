@@ -8,9 +8,9 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
     use tiny_http::{Header, Method, Response, Server};
 
     let server =
-        Server::http(format!("127.0.0.1:{port}")).map_err(|e| anyhow!("Server::http: {e}"))?;
+        Server::http(format!("0.0.0.0:{port}")).map_err(|e| anyhow!("Server::http: {e}"))?;
 
-    println!("Report available at: http://127.0.0.1:{port}/");
+    println!("Report available at: http://0.0.0.0:{port}/");
     println!("Serving report from: {}", out_dir.display());
 
     // roots = report/, parent/, grandparent/
