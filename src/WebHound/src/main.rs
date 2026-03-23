@@ -1,3 +1,4 @@
+use analyzer::text::{TextAnalyzerConfig, TextClassifier};
 use analyzer::vision::*;
 use anyhow::{anyhow, Result};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
@@ -19,7 +20,7 @@ struct Cli {
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum MatchType {
-    /// Домен + поддомены (обычно нужно это)
+    /// Домен + поддомены
     Domain,
     /// Только конкретный host
     Host,
@@ -45,15 +46,15 @@ struct CdxArgs {
     #[arg(long, value_name = "N")]
     limit: Option<u32>,
 
-    /// Отключить collapse=urlkey (иначе CDX склеивает дубли)
+    /// Отключить collapse=urlkey
     #[arg(long, action = ArgAction::SetTrue)]
     no_collapse: bool,
 
-    /// Разрешить записи со статусом не-200 (по умолчанию фильтруется только 200)
+    /// Разрешить записи со статусом не-200
     #[arg(long, action = ArgAction::SetTrue)]
     no_filter_200: bool,
 
-    /// Разрешить не-HTML (JS/CSS/PDF и т.д.), по умолчанию только HTML
+    /// Разрешить не-HTML
     #[arg(long, action = ArgAction::SetTrue)]
     no_filter_html: bool,
 
@@ -65,7 +66,7 @@ struct CdxArgs {
     #[arg(long, default_value_t = 6, value_name = "N")]
     retries: u32,
 
-    /// Включить fallback по годам (если доменный CDX-запрос “плохой”)
+    /// Включить fallback по годам
     #[arg(long, action = ArgAction::SetTrue)]
     year_fallback: bool,
 
@@ -85,16 +86,15 @@ struct ReportArgs {
     #[arg(long, action = ArgAction::SetTrue)]
     analyze: bool,
 
-    /// Путь к ONNX модели
+    /// Путь к ONNX модели для скриншотов
     #[arg(long, value_name = "PATH", default_value = "assets/ml/eyeballer.onnx")]
     model: PathBuf,
 
-    /// Папка отчёта.
-    /// Важно: для scan по умолчанию будет <screenshots>/report (правильный layout для HTML).
+    /// Папка отчёта
     #[arg(long, value_name = "DIR")]
     report: Option<PathBuf>,
 
-    /// Размер batch (сейчас параметр зарезервирован и не используется)
+    /// Размер batch (пока не используется)
     #[arg(long, value_name = "N", default_value_t = 32, hide = true)]
     batch: usize,
 }
@@ -111,9 +111,40 @@ struct ServeArgs {
     port: u16,
 }
 
+#[derive(Args, Debug, Clone)]
+#[command(next_help_heading = "Text model options")]
+struct TextAnalyzeArgs {
+    /// Включить post-анализ sensitive_info.jsonl через text ONNX model
+    #[arg(long, action = ArgAction::SetTrue)]
+    text_analyze: bool,
+
+    /// Папка модели:
+    /// model.onnx + export_metadata.json + tokenizer/tokenizer.json
+    #[arg(long, value_name = "DIR")]
+    text_model_dir: Option<PathBuf>,
+
+    /// Входной sensitive_info.jsonl
+    /// По умолчанию в scan берётся paths.sensitive_jsonl
+    #[arg(long, value_name = "FILE")]
+    text_input: Option<PathBuf>,
+
+    /// Выходной enriched JSONL
+    #[arg(long, value_name = "FILE")]
+    text_output: Option<PathBuf>,
+
+    /// Добавлять [PATH] ... [TEXT] ...
+    /// По умолчанию выключено, потому что в ноутбуке обучение шло с USE_PATH_PREFIX=false
+    #[arg(long, action = ArgAction::SetTrue)]
+    text_use_path_prefix: bool,
+
+    /// Max length для токенизатора
+    #[arg(long, value_name = "N", default_value_t = 192)]
+    text_max_length: usize,
+}
+
 #[derive(Subcommand, Debug)]
 enum Cmd {
-    /// Поднять HTTP-сервер для готового отчёта (index.html + CSV внутри DIR)
+    /// Поднять HTTP-сервер для готового отчёта
     #[command(
         after_help = r#"Examples:
   webhound serv ./example.com/screenshots/report
@@ -130,7 +161,7 @@ enum Cmd {
         port: u16,
     },
 
-    /// Вывести URL’ы из Wayback CDX для домена (stdout или в файл)
+    /// Вывести URL'ы из Wayback CDX для домена
     #[command(
         after_help = r#"Examples:
   webhound cdx example.com
@@ -139,29 +170,31 @@ enum Cmd {
 "#
     )]
     Cdx {
-        /// Домен/host (например www.wildberries.ru)
+        /// Домен/host
         #[arg(value_name = "DOMAIN")]
         domain: String,
 
         #[command(flatten)]
         cdx: CdxArgs,
 
-        /// Сохранить вывод в файл (иначе печатает в stdout)
+        /// Сохранить вывод в файл
         #[arg(long, value_name = "FILE")]
         out: Option<PathBuf>,
     },
 
     /// Полный скан: CDX → скачивание → assets → secrets → screenshots (+ опц. ML-отчёт)
-    #[command(
-        after_help = r#"Examples:
-  webhound scan example.com
-  webhound scan example.com --limit 500
-  webhound scan example.com --analyze --serve
-  webhound scan example.com --analyze --report ./example.com/screenshots/report --port 8000 --serve
+#[command(
+    after_help = r#"Examples:
+  source ./.env
+  WebHound scan example.com
+  WebHound scan example.com --limit 500
+  WebHound scan example.com --analyze --model "$WEBHOUND_VISION_MODEL" --serve
+  WebHound scan example.com --text-analyze --text-model-dir "$WEBHOUND_TEXT_MODEL_DIR"
+  WebHound scan example.com --analyze --model "$WEBHOUND_VISION_MODEL" --text-analyze --text-model-dir "$WEBHOUND_TEXT_MODEL_DIR" --serve
 "#
-    )]
+)]
     Scan {
-        /// Цель скана (лучше передавать домен: example.com)
+        /// Цель скана
         #[arg(value_name = "TARGET")]
         target: String,
 
@@ -172,23 +205,27 @@ enum Cmd {
         report: ReportArgs,
 
         #[command(flatten)]
+        text: TextAnalyzeArgs,
+
+        #[command(flatten)]
         serve: ServeArgs,
     },
 
     /// Анализ локальной папки со скриншотами (без сети)
     #[command(
         after_help = r#"Examples:
-  webhound images ./example.com/screenshots
-  webhound images ./example.com/screenshots --serve
-  webhound images ./screenshots --model assets/ml/eyeballer.onnx --report ./screenshots/report
+  source ./.env
+  WebHound images ./example.com/screenshots
+  WebHound images ./example.com/screenshots --model "$WEBHOUND_VISION_MODEL" --serve
+  WebHound images ./screenshots --model "$WEBHOUND_VISION_MODEL" --report ./screenshots/report
 "#
     )]
     Images {
-        /// Папка со скриншотами (PNG/JPG)
+        /// Папка со скриншотами
         #[arg(value_name = "DIR")]
         dir: PathBuf,
 
-        /// (устарело) — в режиме images анализ всегда выполняется
+        /// Устарело, в режиме images анализ всегда выполняется
         #[arg(long, action = ArgAction::SetTrue, hide = true)]
         analyze: bool,
 
@@ -196,11 +233,11 @@ enum Cmd {
         #[arg(long, value_name = "PATH", default_value = "assets/ml/eyeballer.onnx")]
         model: PathBuf,
 
-        /// Папка отчёта (по умолчанию: <DIR>/report)
+        /// Папка отчёта
         #[arg(long, value_name = "DIR")]
         report: Option<PathBuf>,
 
-        /// Размер batch (сейчас параметр зарезервирован и не используется)
+        /// Размер batch (пока не используется)
         #[arg(long, value_name = "N", default_value_t = 32, hide = true)]
         batch: usize,
 
@@ -211,8 +248,10 @@ enum Cmd {
     /// Пост-анализ папки assets (или любой папки с файлами) по правилам PATTERNS
     #[command(
         after_help = r#"Examples:
-  webhound assets ./example.com/assets
-  webhound assets ./example.com/assets --out ./example.com/sensitive_info.post.jsonl
+  source ./.env
+  WebHound assets ./example.com/assets
+  WebHound assets ./example.com/assets --out ./example.com/sensitive_info.post.jsonl
+  WebHound text-analyze ./example.com/sensitive_info.post.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR" --out ./example.com/sensitive_info.post.ml.jsonl
 "#
     )]
     Assets {
@@ -220,9 +259,40 @@ enum Cmd {
         #[arg(value_name = "DIR")]
         dir: PathBuf,
 
-        /// Куда писать JSONL (по умолчанию: sensitive_info.post.jsonl рядом)
+        /// Куда писать JSONL
         #[arg(long, value_name = "FILE")]
         out: Option<PathBuf>,
+    },
+
+    /// Прогнать existing sensitive_info.jsonl через text ONNX model
+    #[command(
+        after_help = r#"Examples:
+  WebHound text-analyze ./example.com/sensitive_info.jsonl
+  WebHound text-analyze ./example.com/sensitive_info.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR"
+  WebHound text-analyze ./example.com/sensitive_info.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR" --out ./example.com/sensitive_info.ml.jsonl
+  WebHound text-analyze ./example.com/sensitive_info.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR" --text-use-path-prefix
+"#
+    )]
+    TextAnalyze {
+        /// Входной sensitive_info JSONL
+        #[arg(value_name = "INPUT_JSONL")]
+        input: PathBuf,
+
+        /// Папка модели
+        #[arg(long, value_name = "DIR")]
+        model_dir: PathBuf,
+
+        /// Выходной enriched JSONL
+        #[arg(long, value_name = "FILE")]
+        out: Option<PathBuf>,
+
+        /// Добавлять [PATH] ... [TEXT] ...
+        #[arg(long, action = ArgAction::SetTrue)]
+        text_use_path_prefix: bool,
+
+        /// Max length для токенизатора
+        #[arg(long, value_name = "N", default_value_t = 192)]
+        text_max_length: usize,
     },
 }
 
@@ -237,12 +307,37 @@ fn analyze_and_maybe_serve(
 
     let runner = EyeballerRunner::new(model, Labels::eyeballer_default())?;
     let (_csv, html) = runner.infer_to_csv_html(images_dir, out_dir, "predictions.csv", None)?;
+
     println!("Отчёт: {}", html.display());
 
     if serve {
         println!("Сервер: http://127.0.0.1:{}/", port);
         server::server(out_dir, port)?;
     }
+
+    Ok(())
+}
+
+fn annotate_sensitive_info(
+    model_dir: &PathBuf,
+    input_jsonl: &PathBuf,
+    output_jsonl: &PathBuf,
+    use_path_prefix: bool,
+    max_length: usize,
+) -> Result<()> {
+    let mut cfg = TextAnalyzerConfig::new(model_dir);
+    cfg.use_path_prefix = use_path_prefix;
+    cfg.max_length = max_length;
+
+    let classifier = TextClassifier::new(cfg)?;
+    let stats = classifier.annotate_jsonl(input_jsonl, output_jsonl)?;
+
+    println!("Text-ML annotated: {}", output_jsonl.display());
+    println!("Processed samples: {}", stats.total);
+    for (label, n) in stats.by_label {
+        println!("  {label}: {n}");
+    }
+
     Ok(())
 }
 
@@ -253,7 +348,7 @@ async fn main() -> Result<()> {
     match args.cmd {
         Cmd::Serv { dir, port } => {
             println!(
-                "Сервер отчёта: http://127.0.0.1:{}/  (dir = {})",
+                "Сервер отчёта: http://0.0.0.0:{}/ (dir = {})",
                 port,
                 dir.display()
             );
@@ -279,6 +374,7 @@ async fn main() -> Result<()> {
             };
 
             let body = scanner::net::fetch_wayback_urls_resilient(&client, &domain, opts).await?;
+
             if let Some(path) = out {
                 fs::write(&path, body)?;
                 println!("Saved: {}", path.display());
@@ -291,9 +387,9 @@ async fn main() -> Result<()> {
             target,
             cdx,
             report,
+            text,
             serve,
         } => {
-            // Устанавливаем defaults для net слоя (scan потом их использует)
             scanner::net::set_cdx_defaults(scanner::net::CdxDomainOpts {
                 match_type: cdx.match_type.as_str().to_string(),
                 collapse_urlkey: !cdx.no_collapse,
@@ -310,10 +406,35 @@ async fn main() -> Result<()> {
             let paths = run_scan(&target)
                 .await
                 .map_err(|e| anyhow!(e.to_string()))?;
+
             println!("Скан завершён. Результаты: {}", paths.base.display());
 
+            if text.text_analyze {
+                let model_dir = text
+                    .text_model_dir
+                    .clone()
+                    .ok_or_else(|| anyhow!("--text-model-dir обязателен при --text-analyze"))?;
+
+                let input_jsonl = text
+                    .text_input
+                    .clone()
+                    .unwrap_or_else(|| paths.sensitive_info_txt.clone());
+
+                let output_jsonl = text
+                    .text_output
+                    .clone()
+                    .unwrap_or_else(|| paths.base.join("sensitive_info.ml.jsonl"));
+
+                annotate_sensitive_info(
+                    &model_dir,
+                    &input_jsonl,
+                    &output_jsonl,
+                    text.text_use_path_prefix,
+                    text.text_max_length,
+                )?;
+            }
+
             if report.analyze {
-                // Самый “правильный” дефолт: отчёт рядом со скриншотами -> <screenshots>/report
                 let out_dir = report
                     .report
                     .clone()
@@ -337,7 +458,6 @@ async fn main() -> Result<()> {
             batch: _,
             serve,
         } => {
-            // В режиме images анализ всегда выполняем (это и есть смысл режима)
             let out_dir = report.clone().unwrap_or_else(|| dir.join("report"));
             analyze_and_maybe_serve(&dir, &out_dir, &model, serve.serve, serve.port)?;
         }
@@ -354,12 +474,33 @@ async fn main() -> Result<()> {
             });
 
             scanner::postfilter::postfilter_assets_dir_to_file(&dir, &out_file).await?;
+
             println!("Assets postfilter done.");
             println!("Assets dir: {}", dir.display());
             println!("Output: {}", out_file.display());
+        }
+
+        Cmd::TextAnalyze {
+            input,
+            model_dir,
+            out,
+            text_use_path_prefix,
+            text_max_length,
+        } => {
+            let output_jsonl = out.unwrap_or_else(|| {
+                let parent = input.parent().unwrap_or_else(|| std::path::Path::new("."));
+                parent.join("sensitive_info.ml.jsonl")
+            });
+
+            annotate_sensitive_info(
+                &model_dir,
+                &input,
+                &output_jsonl,
+                text_use_path_prefix,
+                text_max_length,
+            )?;
         }
     }
 
     Ok(())
 }
-

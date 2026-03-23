@@ -111,7 +111,6 @@
       background: rgba(255, 255, 255, 0.03);
     }
 
-    /* tabs */
     .tabs {
       margin-top: 12px;
       display: flex;
@@ -249,7 +248,6 @@
       color: var(--muted);
     }
 
-    /* Viewer */
     .head {
       padding: 14px;
       border-bottom: 1px solid var(--line);
@@ -418,7 +416,6 @@
       text-align: right;
     }
 
-    /* Grid */
     .gridTop {
       padding: 14px;
       border-bottom: 1px solid var(--line);
@@ -519,7 +516,6 @@
       color: var(--warn);
     }
 
-    /* Modal zoom */
     .modal {
       position: fixed;
       inset: 0;
@@ -570,7 +566,6 @@
       font-size: 12px;
     }
 
-    /* JSONL table */
     table.tbl {
       width: 100%;
       border-collapse: collapse;
@@ -674,7 +669,6 @@
       </div>
     </div>
 
-    <!-- SCREENS TAB -->
     <div class="tabPane active" id="tab-screens">
       <div class="card" id="viewerCard">
         <div class="top">
@@ -757,7 +751,6 @@
       </div>
     </div>
 
-    <!-- JSONL TAB -->
     <div class="tabPane" id="tab-jsonl">
       <div class="card" id="jsonlCard">
         <div class="top">
@@ -799,6 +792,8 @@
                 <tr>
                   <th data-col="rule_name">rule_name</th>
                   <th data-col="label">label</th>
+                  <th data-col="ml_pred_label">ml_pred_label</th>
+                  <th data-col="ml_pred_score">ml_pred_score</th>
                   <th data-col="value">value</th>
                   <th data-col="path">path</th>
                   <th data-col="line">line</th>
@@ -815,6 +810,12 @@
                 <div class="k">Label</div>
                 <div class="v" id="jsonlSelLabel">-</div>
 
+                <div class="k">ML pred</div>
+                <div class="v" id="jsonlSelMlPred">-</div>
+
+                <div class="k">ML score</div>
+                <div class="v" id="jsonlSelMlScore">-</div>
+
                 <div class="k">Value</div>
                 <div class="v" id="jsonlSelValue">-</div>
 
@@ -828,21 +829,10 @@
                 <div class="v" id="jsonlSelLine">-</div>
               </div>
 
-              <div style="
-                    margin-top: 10px;
-                    display: flex;
-                    gap: 10px;
-                    flex-wrap: wrap;
-                  ">
-                <button id="jsonlOpenPath" class="btn-ghost">
-                  Open (if possible)
-                </button>
-                <button id="jsonlCopyValue" class="btn-ghost">
-                  Copy value
-                </button>
-                <button id="jsonlCopyPath" class="btn-ghost">
-                  Copy path
-                </button>
+              <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
+                <button id="jsonlOpenPath" class="btn-ghost">Open (if possible)</button>
+                <button id="jsonlCopyValue" class="btn-ghost">Copy value</button>
+                <button id="jsonlCopyPath" class="btn-ghost">Copy path</button>
               </div>
             </div>
 
@@ -856,7 +846,6 @@
     </div>
   </div>
 
-  <!-- ZOOM MODAL (for screens) -->
   <div class="modal" id="modal">
     <div class="inner">
       <button class="close" id="modalClose">Esc / click image</button>
@@ -865,7 +854,6 @@
   </div>
 
   <script>
-    // ---------------- tabs ----------------
     function setTab(name) {
       document.querySelectorAll(".tabBtn").forEach((b) => {
         b.classList.toggle("active", b.dataset.tab === name);
@@ -885,7 +873,6 @@
 
     setTab(localStorage.getItem("wh_tab") || "screens");
 
-    // ---------------- shared helpers ----------------
     function parseCsvLine(line) {
       const out = [];
       let cur = "";
@@ -927,8 +914,7 @@
       return await r.text();
     }
 
-    // ---------------- SCREENS ----------------
-    const STATE = {rows: [], labels: [], filteredIdx: [], activeIdx: 0};
+    const STATE = { rows: [], labels: [], filteredIdx: [], activeIdx: 0 };
 
     function showSaved(msg) {
       const el = document.getElementById("savedPill");
@@ -961,7 +947,7 @@
       const csv = buildAnnotationsCsv();
       const r = await fetch("/api/annotations", {
         method: "POST",
-        headers: {"Content-Type": "text/csv;charset=utf-8"},
+        headers: { "Content-Type": "text/csv;charset=utf-8" },
         body: csv,
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -970,7 +956,7 @@
 
     function downloadCsv() {
       const csv = buildAnnotationsCsv();
-      const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "annotations.csv";
@@ -996,7 +982,6 @@
       return set.has(label);
     }
 
-    // Variant 3: grid autoscroll only if thumbsCard is visible in viewport
     function isElementVisible(el, minVisiblePx = 80) {
       if (!el) return false;
       const r = el.getBoundingClientRect();
@@ -1204,7 +1189,7 @@
         if (isElementVisible(thumbs, 80)) {
           const grid = document.getElementById("grid");
           const active = grid && grid.querySelector(".tile.active");
-          if (active) active.scrollIntoView({block: "nearest"});
+          if (active) active.scrollIntoView({ block: "nearest" });
         }
       }
     }
@@ -1260,7 +1245,7 @@
       STATE.labels = labels;
 
       const annText = await fetchTextIfExists("annotations.csv");
-      const annMap = new Map(); // file -> Set(labels)
+      const annMap = new Map();
 
       if (annText) {
         const al = annText.trim().split(/\r?\n/);
@@ -1316,7 +1301,7 @@
           if (!h.startsWith("p_")) continue;
           const lbl = h.slice(2);
           const v = Number(c[idx[h]]) || 0;
-          probs.push({label: lbl, value: v});
+          probs.push({ label: lbl, value: v });
         }
         probs.sort((a, b) => b.value - a.value);
 
@@ -1425,15 +1410,15 @@
       renderAll();
     }
 
-    // ---------------- JSONL ----------------
     const JSONL = {
       items: [],
       filtered: [],
-      sort: {col: "rule_name", dir: "asc"},
+      sort: { col: "rule_name", dir: "asc" },
       active: null,
       ruleSet: new Set(),
       labelSet: new Set(),
       relCache: new Map(),
+      mlPredSet: new Set(),
     };
 
     function setJsonlStatus(s) {
@@ -1448,7 +1433,6 @@
     }
 
     function normalizeJsonlEntry(obj) {
-      // Sometimes obj.text is a JSON string of the real finding
       let inner = null;
       if (obj && typeof obj.text === "string") {
         const t = obj.text.trim();
@@ -1458,7 +1442,9 @@
           } catch { }
         }
       }
+
       const src = inner && inner.spans && inner.text ? inner : obj;
+
       return {
         path: src.path ?? obj.path ?? "",
         line: src.line ?? obj.line ?? null,
@@ -1468,6 +1454,8 @@
           : Array.isArray(obj.spans)
             ? obj.spans
             : [],
+        ml_pred_label: obj.ml_pred_label ?? src.ml_pred_label ?? "",
+        ml_pred_score: obj.ml_pred_score ?? src.ml_pred_score ?? null,
       };
     }
 
@@ -1487,19 +1475,19 @@
           (x) =>
             String(x.value).toLowerCase().includes(q) ||
             String(x.path).toLowerCase().includes(q) ||
-            String(x.text).toLowerCase().includes(q),
+            String(x.text).toLowerCase().includes(q) ||
+            String(x.ml_pred_label).toLowerCase().includes(q),
         );
       }
 
-      // sort
-      const {col, dir} = JSONL.sort;
+      const { col, dir } = JSONL.sort;
       arr = [...arr].sort((a, b) => {
-        let av = a[col],
-          bv = b[col];
+        let av = a[col], bv = b[col];
         if (
           col === "line" ||
           col === "entropy_h" ||
-          col === "entropy_total_bits"
+          col === "entropy_total_bits" ||
+          col === "ml_pred_score"
         ) {
           av = Number(av) || 0;
           bv = Number(bv) || 0;
@@ -1528,7 +1516,7 @@
       tb.innerHTML = "";
 
       const frag = document.createDocumentFragment();
-      const maxRows = Math.min(JSONL.filtered.length, 2000); // keep UI responsive
+      const maxRows = Math.min(JSONL.filtered.length, 2000);
       for (let i = 0; i < maxRows; i++) {
         const it = JSONL.filtered[i];
         const tr = document.createElement("tr");
@@ -1542,9 +1530,16 @@
           jsonlRenderTable();
         };
 
+        const mlScore =
+          typeof it.ml_pred_score === "number"
+            ? Number(it.ml_pred_score).toFixed(4)
+            : "";
+
         tr.innerHTML = `
           <td>${it.rule_name}</td>
           <td class="mono">${it.label}</td>
+          <td class="mono">${it.ml_pred_label || ""}</td>
+          <td class="mono">${mlScore}</td>
           <td class="mono">${it.value}</td>
           <td class="mono">${shortPath(it.path)}</td>
           <td class="mono">${it.line ?? ""}</td>
@@ -1588,6 +1583,8 @@
     function jsonlRenderSelected() {
       const it = JSONL.active;
       const elLabel = document.getElementById("jsonlSelLabel");
+      const elMlPred = document.getElementById("jsonlSelMlPred");
+      const elMlScore = document.getElementById("jsonlSelMlScore");
       const elValue = document.getElementById("jsonlSelValue");
       const elRule = document.getElementById("jsonlSelRule");
       const elPath = document.getElementById("jsonlSelPath");
@@ -1596,6 +1593,8 @@
 
       if (!it) {
         elLabel.textContent = "-";
+        elMlPred.textContent = "-";
+        elMlScore.textContent = "-";
         elValue.textContent = "-";
         elRule.textContent = "-";
         elPath.textContent = "-";
@@ -1605,12 +1604,16 @@
       }
 
       elLabel.textContent = it.label || "-";
+      elMlPred.textContent = it.ml_pred_label || "-";
+      elMlScore.textContent =
+        typeof it.ml_pred_score === "number"
+          ? Number(it.ml_pred_score).toFixed(4)
+          : "-";
       elValue.textContent = it.value || "-";
       elRule.textContent = it.rule_name || "-";
       elPath.textContent = it.path || "-";
       elLine.textContent = it.line ?? "-";
 
-      // render text with highlight
       const html = highlightText(it.text, it.start, it.end);
       elText.innerHTML = html;
 
@@ -1655,8 +1658,8 @@
       JSONL.active = null;
       JSONL.ruleSet = new Set();
       JSONL.labelSet = new Set();
+      JSONL.mlPredSet = new Set();
 
-      // fetch via API (server searches in roots)
       const r = await fetch(`/api/jsonl?file=${encodeURIComponent(p)}`);
       if (!r.ok) {
         setJsonlStatus(`HTTP ${r.status}`);
@@ -1681,7 +1684,7 @@
         for (const s of spans) {
           const item = {
             __id: ++id,
-            rule_name: s.rule_name || "",
+            rule_name: s.rule_name || s.rule || "",
             label: s.label || "",
             value: s.value || "",
             entropy_h: s.entropy_h ?? null,
@@ -1691,14 +1694,21 @@
             text: base.text || "",
             start: s.start,
             end: s.end,
+            ml_pred_label: base.ml_pred_label || "",
+            ml_pred_score:
+              typeof base.ml_pred_score === "number"
+                ? base.ml_pred_score
+                : (base.ml_pred_score != null && !isNaN(Number(base.ml_pred_score)))
+                  ? Number(base.ml_pred_score)
+                  : null,
           };
           JSONL.items.push(item);
           if (item.rule_name) JSONL.ruleSet.add(item.rule_name);
           if (item.label) JSONL.labelSet.add(item.label);
+          if (item.ml_pred_label) JSONL.mlPredSet.add(item.ml_pred_label);
         }
       }
 
-      // fill filters
       const selRule = document.getElementById("jsonlFilterRule");
       const selLabel = document.getElementById("jsonlFilterLabel");
       selRule.innerHTML = `<option value="">rule_name: (all)</option>`;
@@ -1733,7 +1743,6 @@
       jsonlRenderSelected();
     }
 
-    // sort table by clicking header
     document
       .getElementById("jsonlTable")
       .querySelector("thead")
@@ -1758,12 +1767,10 @@
     document.getElementById("jsonlFilterLabel").onchange = jsonlApplyFilters;
     document.getElementById("jsonlSearch").oninput = jsonlApplyFilters;
 
-    // default jsonl path
     document.getElementById("jsonlPath").value =
       localStorage.getItem("wh_jsonl_path") ||
-      "../../sensitive_info.post.jsonl";
+      "../../sensitive_info.post.ml.jsonl";
 
-    // init screens
     initScreens();
   </script>
 </body>

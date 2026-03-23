@@ -1,0 +1,19 @@
+{
+  "model_name": "modernbert_base",
+  "source_model_dir": "/mnt/ml/benchmark_outputs/multiclass/modernbert_base/checkpoint-1487",
+  "source_tokenizer_dir": "/mnt/ml/benchmark_outputs/multiclass/modernbert_base/checkpoint-1487",
+  "onnx_path": "/mnt/ml/onnx_exports/modernbert_base/model.onnx",
+  "num_labels": 6,
+  "id2label": {
+    "0": "API_KEY",
+    "1": "JWT",
+    "2": "NOT_SECRET",
+    "3": "OTHER_SECRET",
+    "4": "PRIVATE_KEY",
+    "5": "TOKEN"
+  },
+  "max_position_embeddings": 8192,
+  "architectures": [
+    "ModernBertForSequenceClassification"
+  ]
+}
