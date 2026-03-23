@@ -372,6 +372,7 @@ CREATE INDEX IF NOT EXISTS idx_events_run ON events(scan_run_id);
         ml_score: f64,
         ml_scores_json: &str,
     ) -> Result<()> {
+        let local_path = normalize_path_str(local_path);
         let now = Utc::now().to_rfc3339();
         let conn = self.conn.lock().expect("sqlite mutex poisoned");
         conn.execute(

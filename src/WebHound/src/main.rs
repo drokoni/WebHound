@@ -347,7 +347,12 @@ fn import_vision_csv_to_db(
 
     for rec in rdr.records() {
         let rec = rec?;
-        let local_path = rec.get(file_idx).unwrap_or("").to_string();
+        let local_path_raw = rec.get(file_idx).unwrap_or("").to_string();
+        let local_path = if let Ok(canon) = std::path::PathBuf::from(&local_path_raw).canonicalize() {
+            canon.to_string_lossy().to_string()
+        } else {
+            local_path_raw
+        };
         let top_label = rec.get(top_label_idx).unwrap_or("").to_string();
         let top_prob: f64 = rec.get(top_prob_idx).unwrap_or("0").parse().unwrap_or(0.0);
 
