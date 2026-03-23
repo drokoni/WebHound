@@ -332,11 +332,17 @@ fn import_vision_csv_to_db(
     let mut rdr = csv::Reader::from_path(&csv_path)?;
     let headers = rdr.headers()?.clone();
 
-    let file_idx = headers.iter().position(|h| h == "file")
+    let file_idx = headers
+        .iter()
+        .position(|h| h == "file")
         .ok_or_else(|| anyhow!("predictions.csv: no 'file' column"))?;
-    let top_label_idx = headers.iter().position(|h| h == "top_label")
+    let top_label_idx = headers
+        .iter()
+        .position(|h| h == "top_label")
         .ok_or_else(|| anyhow!("predictions.csv: no 'top_label' column"))?;
-    let top_prob_idx = headers.iter().position(|h| h == "top_prob")
+    let top_prob_idx = headers
+        .iter()
+        .position(|h| h == "top_prob")
         .ok_or_else(|| anyhow!("predictions.csv: no 'top_prob' column"))?;
 
     for rec in rdr.records() {
@@ -358,16 +364,35 @@ fn import_vision_csv_to_db(
 
         let ml_scores_json = serde_json::Value::Object(probs_map).to_string();
 
-        sqlite.upsert_screenshot_ml_only(
-            scan_run_id,
-            "",
-            &local_path,
-            "vision",
-            None,
-            &top_label,
-            top_prob,
-            &ml_scores_json,
-        )?;
+        if sqlite.find_screenshot_by_local_path(&local_path)?.is_some() {
+            sqlite.update_screenshot_ml(
+                &local_path,
+                "vision",
+                None,
+                &top_label,
+                top_prob,
+                &ml_scores_json,
+            )?;
+        } else {
+            sqlite.insert_screenshot(&storage::NewScreenshot {
+                scan_run_id,
+                page_url: String::new(),
+                local_path: local_path.clone(),
+                image_sha256: None,
+                width: None,
+                height: None,
+                file_size: None,
+                ml_model_name: Some("vision".to_string()),
+                ml_model_version: None,
+                ml_label: Some(top_label.clone()),
+                ml_score: Some(top_prob),
+                ml_scores_json: Some(ml_scores_json.clone()),
+                user_label: None,
+                user_label_updated_at: None,
+                user_label_updated_by: None,
+                analyst_note: None,
+            })?;
+        }
     }
 
     Ok(())
@@ -398,7 +423,7 @@ fn annotate_sensitive_info(
 
 fn annotate_text_from_db(
     sqlite: &SqliteStorage,
-    scan_run_id: i64,
+    text_run_id: i64,
     model_dir: &PathBuf,
     use_path_prefix: bool,
     max_length: usize,
@@ -408,14 +433,19 @@ fn annotate_text_from_db(
     cfg.max_length = max_length;
 
     let classifier = TextClassifier::new(cfg)?;
-    let rows = sqlite.list_raw_findings_for_run(scan_run_id)?;
+
+    let source_run_id = sqlite
+        .latest_scan_run_id()?
+        .ok_or_else(|| anyhow!("Не найден scan run с raw_findings для text ML"))?;
+
+    let rows = sqlite.list_raw_findings_for_run(source_run_id)?;
 
     for row in rows {
         let pred = classifier.predict_text(&row.context_text, Some(&row.source_path))?;
         let ml_scores_json = serde_json::to_string(&pred.pred_probs)?;
 
         sqlite.insert_analysis_finding(&NewAnalysisFinding {
-            scan_run_id,
+            scan_run_id: text_run_id,
             raw_finding_id: Some(row.id),
             source_path: row.source_path.clone(),
             source_kind: row.source_kind.clone(),
@@ -618,26 +648,58 @@ if text.text_analyze {
             println!("Assets dir: {}", dir.display());
         }
 
-        Cmd::TextAnalyze {
-            input,
-            model_dir,
-            out,
-            text_use_path_prefix,
-            text_max_length,
-        } => {
-            let output_jsonl = out.unwrap_or_else(|| {
-                let parent = input.parent().unwrap_or_else(|| std::path::Path::new("."));
-                parent.join("sensitive_info.ml.jsonl")
-            });
+Cmd::TextAnalyze {
+    input,
+    model_dir,
+    out,
+    text_use_path_prefix,
+    text_max_length,
+} => {
+    let sqlite = SqliteStorage::open("webhound.db")?;
 
-            annotate_sensitive_info(
-                &model_dir,
-                &input,
-                &output_jsonl,
-                text_use_path_prefix,
-                text_max_length,
-            )?;
+    let text_run_id = sqlite.create_scan_run(storage::NewScanRun {
+        target: ".".to_string(),
+        mode: "text_analyze".to_string(),
+        status: "running".to_string(),
+        config_json: None,
+    })?;
+
+    let result = annotate_text_from_db(
+        &sqlite,
+        text_run_id,
+        &model_dir,
+        text_use_path_prefix,
+        text_max_length,
+    );
+
+    match result {
+        Ok(()) => {
+            let _ = sqlite.finish_scan_run(text_run_id, "success");
+
+            // optional legacy output
+            if let Some(output_jsonl) = out {
+        annotate_sensitive_info(
+    &model_dir,
+    &input,
+    &output_jsonl,
+    text_use_path_prefix,
+    text_max_length,
+)?;
+            }
         }
+        Err(e) => {
+            let _ = sqlite.insert_event(&NewEvent {
+                scan_run_id: Some(text_run_id),
+                level: "error".to_string(),
+                component: "text_ml".to_string(),
+                message: "text db annotation failed".to_string(),
+                details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
+            });
+            let _ = sqlite.finish_scan_run(text_run_id, "failed");
+            return Err(e);
+        }
+    }
+}
     }
 
     Ok(())

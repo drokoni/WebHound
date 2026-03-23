@@ -305,6 +305,7 @@ CREATE INDEX IF NOT EXISTS idx_events_run ON events(scan_run_id);
     pub fn insert_screenshot(&self, row: &NewScreenshot) -> Result<()> {
         let now = Utc::now().to_rfc3339();
         let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        let local_path = normalize_path_str(&row.local_path);
         conn.execute(
             r#"
             INSERT OR IGNORE INTO screenshots (
@@ -317,7 +318,7 @@ CREATE INDEX IF NOT EXISTS idx_events_run ON events(scan_run_id);
             params![
                 row.scan_run_id,
                 row.page_url,
-                row.local_path,
+                local_path,
                 row.image_sha256,
                 row.width.map(|v| v as i64),
                 row.height.map(|v| v as i64),
@@ -486,6 +487,7 @@ pub fn list_raw_findings_for_run(&self, scan_run_id: i64) -> Result<Vec<crate::m
 }
 pub fn find_screenshot_by_local_path(&self, local_path: &str) -> Result<Option<crate::models::ScreenshotRow>> {
     let conn = self.conn.lock().expect("sqlite mutex poisoned");
+    let local_path = normalize_path_str(local_path);
     let mut stmt = conn.prepare(
         r#"
         SELECT id, scan_run_id, page_url, local_path
@@ -494,6 +496,7 @@ pub fn find_screenshot_by_local_path(&self, local_path: &str) -> Result<Option<c
         ORDER BY id DESC
         LIMIT 1
         "#,
+        
     )?;
 
     let mut rows = stmt.query(params![local_path])?;
@@ -508,6 +511,41 @@ pub fn find_screenshot_by_local_path(&self, local_path: &str) -> Result<Option<c
         Ok(None)
     }
 }
+pub fn latest_scan_run_id(&self) -> Result<Option<i64>> {
+    let conn = self.conn.lock().expect("sqlite mutex poisoned");
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT id
+        FROM scan_runs
+        WHERE mode = 'scan'
+        ORDER BY id DESC
+        LIMIT 1
+        "#,
+    )?;
 
+    let mut rows = stmt.query([])?;
+    if let Some(r) = rows.next()? {
+        Ok(Some(r.get(0)?))
+    } else {
+        Ok(None)
+    }
+}
 }
 
+fn normalize_path_str(path: &str) -> String {
+    let p = std::path::Path::new(path);
+
+    if let Ok(canon) = p.canonicalize() {
+        return canon.to_string_lossy().to_string();
+    }
+
+    if p.is_absolute() {
+        return p.to_string_lossy().to_string();
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        return cwd.join(p).to_string_lossy().to_string();
+    }
+
+    p.to_string_lossy().to_string()
+}
