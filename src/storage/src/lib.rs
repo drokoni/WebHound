@@ -3,6 +3,6 @@ pub mod sqlite;
 
 pub use crate::models::{
     NewAnalysisFinding, NewEvent, NewOutUrl, NewRawFinding, NewScanRun, NewScreenshot,
-    NewSubdomain,
+    NewSubdomain, RawFindingRow, ScreenshotRow,
 };
 pub use crate::sqlite::SqliteStorage;

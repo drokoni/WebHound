@@ -442,5 +442,72 @@ CREATE INDEX IF NOT EXISTS idx_events_run ON events(scan_run_id);
 
     Ok(())
 }
+pub fn list_raw_findings_for_run(&self, scan_run_id: i64) -> Result<Vec<crate::models::RawFindingRow>> {
+    let conn = self.conn.lock().expect("sqlite mutex poisoned");
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT
+            id, scan_run_id, source_path, source_kind, line, sample_kind,
+            finding_type, rule_id, rule_name, match_text, context_text,
+            start_offset, end_offset, entropy_h, entropy_total_bits, value_len, source_text_hash
+        FROM raw_findings
+        WHERE scan_run_id = ?1
+        ORDER BY id ASC
+        "#,
+    )?;
+
+    let rows = stmt.query_map(params![scan_run_id], |r| {
+        Ok(crate::models::RawFindingRow {
+            id: r.get(0)?,
+            scan_run_id: r.get(1)?,
+            source_path: r.get(2)?,
+            source_kind: r.get(3)?,
+            line: r.get::<_, Option<i64>>(4)?.map(|v| v as u32),
+            sample_kind: r.get(5)?,
+            finding_type: r.get(6)?,
+            rule_id: r.get(7)?,
+            rule_name: r.get(8)?,
+            match_text: r.get(9)?,
+            context_text: r.get(10)?,
+            start_offset: r.get::<_, i64>(11)? as usize,
+            end_offset: r.get::<_, i64>(12)? as usize,
+            entropy_h: r.get(13)?,
+            entropy_total_bits: r.get(14)?,
+            value_len: r.get::<_, i64>(15)? as usize,
+            source_text_hash: r.get(16)?,
+        })
+    })?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+pub fn find_screenshot_by_local_path(&self, local_path: &str) -> Result<Option<crate::models::ScreenshotRow>> {
+    let conn = self.conn.lock().expect("sqlite mutex poisoned");
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT id, scan_run_id, page_url, local_path
+        FROM screenshots
+        WHERE local_path = ?1
+        ORDER BY id DESC
+        LIMIT 1
+        "#,
+    )?;
+
+    let mut rows = stmt.query(params![local_path])?;
+    if let Some(r) = rows.next()? {
+        Ok(Some(crate::models::ScreenshotRow {
+            id: r.get(0)?,
+            scan_run_id: r.get(1)?,
+            page_url: r.get(2)?,
+            local_path: r.get(3)?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
 }
 

@@ -6,6 +6,9 @@ use core::analysis::PathsLike;
 use core::patterns::{scan_patterns, should_ignore_path, ScanHit};
 use core::utils::{sanitize_filename, save_bytes};
 
+
+use storage::NewScreenshot;
+use sha2::{Digest, Sha256};
 use anyhow::Result as AnyResult;
 use reqwest::Client;
 use select::{document::Document, predicate::Attr};
@@ -87,7 +90,7 @@ async fn handle_response_for_url(
         handle_html_links(client, final_url, &text, paths, sink).await;
     }
 
-    spawn_screenshot(final_url, paths);
+    spawn_screenshot(final_url, paths, sink);
 }
 
 async fn handle_html_links(
@@ -144,7 +147,7 @@ async fn handle_html_links(
                     }
                 }
 
-                spawn_screenshot(&real_u, paths);
+                spawn_screenshot(&real_u, paths, sink);
             }
             Err(e) => {
                 eprintln!("[!] Ошибка загрузки ресурса {u}: {e}");
@@ -153,15 +156,56 @@ async fn handle_html_links(
     }
 }
 
-fn spawn_screenshot(url: &str, paths: &impl PathsLike) {
+fn spawn_screenshot(
+    url: &str,
+    paths: &impl PathsLike,
+    sink: &crate::sensitive_jsonl::SensitiveSink,
+) {
     let url = url.to_string();
     let dir = paths.screenshots_dir().to_path_buf();
+    let sqlite = sink.sqlite.clone();
+    let scan_run_id = sink.scan_run_id;
 
-    task::spawn(async move {
+    tokio::task::spawn(async move {
         if let Err(e) = make_screenshot_task(&url, &dir).await {
             eprintln!("[!] Ошибка скриншота {url}: {e}");
+            return;
+        }
+
+        let png_path = dir.join(format!("{}.png", core::utils::sanitize_filename(&url)));
+        if !png_path.exists() {
+            return;
+        }
+
+        if let (Some(sqlite), Some(scan_run_id)) = (sqlite, scan_run_id) {
+            let meta = std::fs::metadata(&png_path).ok();
+            let _ = sqlite.insert_screenshot(&NewScreenshot {
+                scan_run_id,
+                page_url: url.clone(),
+                local_path: png_path.display().to_string(),
+                image_sha256: sha256_hex_file(&png_path).ok(),
+                width: None,
+                height: None,
+                file_size: meta.map(|m| m.len()),
+                ml_model_name: None,
+                ml_model_version: None,
+                ml_label: None,
+                ml_score: None,
+                ml_scores_json: None,
+                user_label: None,
+                user_label_updated_at: None,
+                user_label_updated_by: None,
+                analyst_note: None,
+            });
         }
     });
+}
+
+fn sha256_hex_file(path: &Path) -> anyhow::Result<String> {
+    let data = std::fs::read(path)?;
+    let mut hasher = Sha256::new();
+    hasher.update(&data);
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn save_bytes_safe(path: &Path, data: &[u8]) -> AnyResult<()> {

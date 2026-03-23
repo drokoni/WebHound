@@ -98,3 +98,32 @@ pub struct NewEvent {
     pub message: String,
     pub details_json: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawFindingRow {
+    pub id: i64,
+    pub scan_run_id: i64,
+    pub source_path: String,
+    pub source_kind: String,
+    pub line: Option<u32>,
+    pub sample_kind: String,
+    pub finding_type: String,
+    pub rule_id: String,
+    pub rule_name: String,
+    pub match_text: String,
+    pub context_text: String,
+    pub start_offset: usize,
+    pub end_offset: usize,
+    pub entropy_h: f64,
+    pub entropy_total_bits: f64,
+    pub value_len: usize,
+    pub source_text_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScreenshotRow {
+    pub id: i64,
+    pub scan_run_id: i64,
+    pub page_url: String,
+    pub local_path: String,
+}
