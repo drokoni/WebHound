@@ -4,7 +4,9 @@ use anyhow::{anyhow, Result};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use scanner::run_scan;
 use std::{fs, path::PathBuf, time::Duration};
-use storage::{NewAnalysisFinding, NewEvent, SqliteStorage};
+use storage::{
+    NewAnalysisFinding, NewEvent, NewScreenshot, NewScanRun, NewVisionPrediction, SqliteStorage,
+};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -21,9 +23,7 @@ struct Cli {
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum MatchType {
-    /// Домен + поддомены
     Domain,
-    /// Только конкретный host
     Host,
 }
 
@@ -39,43 +39,33 @@ impl MatchType {
 #[derive(Args, Debug, Clone)]
 #[command(next_help_heading = "CDX options")]
 struct CdxArgs {
-    /// Как CDX матчить адреса: domain (домен+поддомены) или host (только хост)
     #[arg(long, value_enum, default_value_t = MatchType::Domain)]
     match_type: MatchType,
 
-    /// Ограничить число URL, возвращаемых CDX
     #[arg(long, value_name = "N")]
     limit: Option<u32>,
 
-    /// Отключить collapse=urlkey
     #[arg(long, action = ArgAction::SetTrue)]
     no_collapse: bool,
 
-    /// Разрешить записи со статусом не-200
     #[arg(long, action = ArgAction::SetTrue)]
     no_filter_200: bool,
 
-    /// Разрешить не-HTML
     #[arg(long, action = ArgAction::SetTrue)]
     no_filter_html: bool,
 
-    /// Таймаут HTTP запросов (в секундах)
     #[arg(long, default_value_t = 30, value_name = "SEC")]
     timeout_s: u64,
 
-    /// Количество ретраев при 429/5xx/сетевых ошибках
     #[arg(long, default_value_t = 6, value_name = "N")]
     retries: u32,
 
-    /// Включить fallback по годам
     #[arg(long, action = ArgAction::SetTrue)]
     year_fallback: bool,
 
-    /// Год начала fallback по годам
     #[arg(long, default_value_t = 2018, value_name = "YYYY")]
     year_from: u16,
 
-    /// Год конца fallback по годам
     #[arg(long, default_value_t = 2025, value_name = "YYYY")]
     year_to: u16,
 }
@@ -83,19 +73,15 @@ struct CdxArgs {
 #[derive(Args, Debug, Clone)]
 #[command(next_help_heading = "Report / ML options")]
 struct ReportArgs {
-    /// Включить анализ скриншотов (ONNX) и генерацию HTML-отчёта
     #[arg(long, action = ArgAction::SetTrue)]
     analyze: bool,
 
-    /// Путь к ONNX модели для скриншотов
     #[arg(long, value_name = "PATH", default_value = "assets/ml/eyeballer.onnx")]
     model: PathBuf,
 
-    /// Папка отчёта
     #[arg(long, value_name = "DIR")]
     report: Option<PathBuf>,
 
-    /// Размер batch (пока не используется)
     #[arg(long, value_name = "N", default_value_t = 32, hide = true)]
     batch: usize,
 }
@@ -103,66 +89,57 @@ struct ReportArgs {
 #[derive(Args, Debug, Clone)]
 #[command(next_help_heading = "Serve options")]
 struct ServeArgs {
-    /// Поднять HTTP-сервер для отчёта
     #[arg(long, action = ArgAction::SetTrue)]
     serve: bool,
 
-    /// Порт сервера
     #[arg(long, value_name = "PORT", default_value_t = 8000)]
     port: u16,
+
+    #[arg(long, value_name = "HOST", default_value = "127.0.0.1")]
+    host: String,
 }
 
 #[derive(Args, Debug, Clone)]
 #[command(next_help_heading = "Text model options")]
 struct TextAnalyzeArgs {
-    /// Включить post-анализ sensitive_info.jsonl через text ONNX model
     #[arg(long, action = ArgAction::SetTrue)]
     text_analyze: bool,
 
-    /// Папка модели:
-    /// model.onnx + export_metadata.json + tokenizer/tokenizer.json
     #[arg(long, value_name = "DIR")]
     text_model_dir: Option<PathBuf>,
 
-    /// Входной sensitive_info.jsonl
-    /// По умолчанию в scan берётся paths.sensitive_jsonl
     #[arg(long, value_name = "FILE")]
     text_input: Option<PathBuf>,
 
-    /// Выходной enriched JSONL
     #[arg(long, value_name = "FILE")]
     text_output: Option<PathBuf>,
 
-    /// Добавлять [PATH] ... [TEXT] ...
-    /// По умолчанию выключено, потому что в ноутбуке обучение шло с USE_PATH_PREFIX=false
     #[arg(long, action = ArgAction::SetTrue)]
     text_use_path_prefix: bool,
 
-    /// Max length для токенизатора
     #[arg(long, value_name = "N", default_value_t = 192)]
     text_max_length: usize,
 }
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
-    /// Поднять HTTP-сервер для готового отчёта
     #[command(
         after_help = r#"Examples:
   webhound serv ./example.com/screenshots/report
-  webhound serv ./report --port 8000
+  webhound serv ./report --host 127.0.0.1 --port 8000
 "#
     )]
     Serv {
-        /// Папка отчёта (где лежит index.html)
         #[arg(value_name = "REPORT_DIR")]
         dir: PathBuf,
 
-        /// Порт (по умолчанию 8000)
         #[arg(long, value_name = "PORT", default_value_t = 8000)]
         port: u16,
+
+        #[arg(long, value_name = "HOST", default_value = "127.0.0.1")]
+        host: String,
     },
 
-    /// Вывести URL'ы из Wayback CDX для домена
     #[command(
         after_help = r#"Examples:
   webhound cdx example.com
@@ -171,19 +148,16 @@ enum Cmd {
 "#
     )]
     Cdx {
-        /// Домен/host
         #[arg(value_name = "DOMAIN")]
         domain: String,
 
         #[command(flatten)]
         cdx: CdxArgs,
 
-        /// Сохранить вывод в файл
         #[arg(long, value_name = "FILE")]
         out: Option<PathBuf>,
     },
 
-    /// Полный скан: CDX → скачивание → assets → secrets → screenshots (+ опц. ML-отчёт)
     #[command(
         after_help = r#"Examples:
   source ./.env
@@ -195,7 +169,6 @@ enum Cmd {
 "#
     )]
     Scan {
-        /// Цель скана
         #[arg(value_name = "TARGET")]
         target: String,
 
@@ -212,7 +185,6 @@ enum Cmd {
         serve: ServeArgs,
     },
 
-    /// Анализ локальной папки со скриншотами (без сети)
     #[command(
         after_help = r#"Examples:
   source ./.env
@@ -222,23 +194,18 @@ enum Cmd {
 "#
     )]
     Images {
-        /// Папка со скриншотами
         #[arg(value_name = "DIR")]
         dir: PathBuf,
 
-        /// Устарело, в режиме images анализ всегда выполняется
         #[arg(long, action = ArgAction::SetTrue, hide = true)]
         analyze: bool,
 
-        /// Путь к ONNX модели
         #[arg(long, value_name = "PATH", default_value = "assets/ml/eyeballer.onnx")]
         model: PathBuf,
 
-        /// Папка отчёта
         #[arg(long, value_name = "DIR")]
         report: Option<PathBuf>,
 
-        /// Размер batch (пока не используется)
         #[arg(long, value_name = "N", default_value_t = 32, hide = true)]
         batch: usize,
 
@@ -246,7 +213,6 @@ enum Cmd {
         serve: ServeArgs,
     },
 
-    /// Пост-анализ папки assets (или любой папки с файлами) по правилам PATTERNS
     #[command(
         after_help = r#"Examples:
   source ./.env
@@ -256,16 +222,13 @@ enum Cmd {
 "#
     )]
     Assets {
-        /// Папка с файлами (обычно .../assets)
         #[arg(value_name = "DIR")]
         dir: PathBuf,
 
-        /// Куда писать JSONL
         #[arg(long, value_name = "FILE")]
         out: Option<PathBuf>,
     },
 
-    /// Прогнать existing sensitive_info.jsonl через text ONNX model
     #[command(
         after_help = r#"Examples:
   WebHound text-analyze ./example.com/sensitive_info.jsonl
@@ -275,23 +238,18 @@ enum Cmd {
 "#
     )]
     TextAnalyze {
-        /// Входной sensitive_info JSONL
         #[arg(value_name = "INPUT_JSONL")]
         input: PathBuf,
 
-        /// Папка модели
         #[arg(long, value_name = "DIR")]
         model_dir: PathBuf,
 
-        /// Выходной enriched JSONL
         #[arg(long, value_name = "FILE")]
         out: Option<PathBuf>,
 
-        /// Добавлять [PATH] ... [TEXT] ...
         #[arg(long, action = ArgAction::SetTrue)]
         text_use_path_prefix: bool,
 
-        /// Max length для токенизатора
         #[arg(long, value_name = "N", default_value_t = 192)]
         text_max_length: usize,
     },
@@ -302,6 +260,7 @@ fn analyze_and_maybe_serve(
     out_dir: &PathBuf,
     model: &PathBuf,
     serve: bool,
+    host: &str,
     port: u16,
 ) -> Result<()> {
     fs::create_dir_all(out_dir).map_err(|e| anyhow!("Не создать {}: {e}", out_dir.display()))?;
@@ -312,10 +271,36 @@ fn analyze_and_maybe_serve(
     println!("Отчёт: {}", html.display());
 
     if serve {
-        println!("Сервер: http://127.0.0.1:{}/", port);
-        server::server(out_dir, port)?;
+        println!("Сервер: http://{}:{}/", host, port);
+        server::server_with_bind(out_dir, host, port)?;
     }
 
+    Ok(())
+}
+
+fn export_predictions_csv_from_db(
+    sqlite: &SqliteStorage,
+    run_id: i64,
+    out_csv: &PathBuf,
+) -> Result<()> {
+    let rows = sqlite.list_screenshots_simple(run_id)?;
+
+    if let Some(parent) = out_csv.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut wtr = csv::Writer::from_path(out_csv)?;
+    wtr.write_record(["file", "top_label", "top_prob"])?;
+
+    for (_id, _page_url, local_path, ml_label, ml_score, _user_label) in rows {
+        wtr.write_record([
+            local_path,
+            ml_label.unwrap_or_default(),
+            ml_score.map(|v| v.to_string()).unwrap_or_default(),
+        ])?;
+    }
+
+    wtr.flush()?;
     Ok(())
 }
 
@@ -353,6 +338,7 @@ fn import_vision_csv_to_db(
         } else {
             local_path_raw
         };
+
         let top_label = rec.get(top_label_idx).unwrap_or("").to_string();
         let top_prob: f64 = rec.get(top_prob_idx).unwrap_or("0").parse().unwrap_or(0.0);
 
@@ -368,8 +354,20 @@ fn import_vision_csv_to_db(
         }
 
         let ml_scores_json = serde_json::Value::Object(probs_map).to_string();
+        let shot = sqlite.find_screenshot_by_local_path(&local_path)?;
 
-        if sqlite.find_screenshot_by_local_path(&local_path)?.is_some() {
+        sqlite.insert_vision_prediction(&NewVisionPrediction {
+            scan_run_id,
+            screenshot_id: shot.as_ref().map(|s| s.id),
+            local_path: local_path.clone(),
+            model_name: Some("vision".to_string()),
+            model_version: None,
+            top_label: top_label.clone(),
+            top_prob,
+            probs_json: ml_scores_json.clone(),
+        })?;
+
+        if shot.is_some() {
             sqlite.update_screenshot_ml(
                 &local_path,
                 "vision",
@@ -379,7 +377,7 @@ fn import_vision_csv_to_db(
                 &ml_scores_json,
             )?;
         } else {
-            sqlite.insert_screenshot(&storage::NewScreenshot {
+            sqlite.insert_screenshot(&NewScreenshot {
                 scan_run_id,
                 page_url: String::new(),
                 local_path: local_path.clone(),
@@ -400,6 +398,7 @@ fn import_vision_csv_to_db(
         }
     }
 
+    export_predictions_csv_from_db(sqlite, scan_run_id, &csv_path)?;
     Ok(())
 }
 
@@ -487,13 +486,14 @@ async fn main() -> Result<()> {
     let args = Cli::parse();
 
     match args.cmd {
-        Cmd::Serv { dir, port } => {
+        Cmd::Serv { dir, port, host } => {
             println!(
-                "Сервер отчёта: http://0.0.0.0:{}/ (dir = {})",
+                "Сервер отчёта: http://{}:{}/ (dir = {})",
+                host,
                 port,
                 dir.display()
             );
-            server::server(&dir, port)?;
+            server::server_with_bind(&dir, &host, port)?;
         }
 
         Cmd::Cdx { domain, cdx, out } => {
@@ -550,45 +550,45 @@ async fn main() -> Result<()> {
 
             println!("Скан завершён. Результаты: {}", paths.base.display());
 
-if text.text_analyze {
-    let model_dir = text
-        .text_model_dir
-        .clone()
-        .ok_or_else(|| anyhow!("--text-model-dir обязателен при --text-analyze"))?;
+            if text.text_analyze {
+                let model_dir = text
+                    .text_model_dir
+                    .clone()
+                    .ok_or_else(|| anyhow!("--text-model-dir обязателен при --text-analyze"))?;
 
-    let sqlite = SqliteStorage::open(paths.base.join("webhound.db"))?;
-    let scan_run_id = sqlite.create_scan_run(storage::NewScanRun {
-        target: paths.base.display().to_string(),
-        mode: "text_analyze".to_string(),
-        status: "running".to_string(),
-        config_json: None,
-    })?;
+                let sqlite = SqliteStorage::open(paths.base.join("webhound.db"))?;
+                let text_run_id = sqlite.create_scan_run(NewScanRun {
+                    target: paths.base.display().to_string(),
+                    mode: "text_analyze".to_string(),
+                    status: "running".to_string(),
+                    config_json: None,
+                })?;
 
-    let result = annotate_text_from_db(
-        &sqlite,
-        scan_run_id,
-        &model_dir,
-        text.text_use_path_prefix,
-        text.text_max_length,
-    );
+                let result = annotate_text_from_db(
+                    &sqlite,
+                    text_run_id,
+                    &model_dir,
+                    text.text_use_path_prefix,
+                    text.text_max_length,
+                );
 
-    match result {
-        Ok(()) => {
-            let _ = sqlite.finish_scan_run(scan_run_id, "success");
-        }
-        Err(e) => {
-            let _ = sqlite.insert_event(&NewEvent {
-                scan_run_id: Some(scan_run_id),
-                level: "error".to_string(),
-                component: "text_ml".to_string(),
-                message: "text db annotation failed".to_string(),
-                details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
-            });
-            let _ = sqlite.finish_scan_run(scan_run_id, "failed");
-            return Err(e);
-        }
-    }
-}
+                match result {
+                    Ok(()) => {
+                        let _ = sqlite.finish_scan_run(text_run_id, "success");
+                    }
+                    Err(e) => {
+                        let _ = sqlite.insert_event(&NewEvent {
+                            scan_run_id: Some(text_run_id),
+                            level: "error".to_string(),
+                            component: "text_ml".to_string(),
+                            message: "text db annotation failed".to_string(),
+                            details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
+                        });
+                        let _ = sqlite.finish_scan_run(text_run_id, "failed");
+                        return Err(e);
+                    }
+                }
+            }
 
             if report.analyze {
                 let out_dir = report
@@ -601,51 +601,59 @@ if text.text_analyze {
                     &out_dir,
                     &report.model,
                     serve.serve,
+                    &serve.host,
                     serve.port,
                 )?;
             }
         }
 
         Cmd::Images {
-    dir,
-    analyze: _,
-    model,
-    report,
-    batch: _,
-    serve,
-} => {
-    let (sqlite, scan_run_id) = scanner::run_images_analysis(&dir).await?;
+            dir,
+            analyze: _,
+            model,
+            report,
+            batch: _,
+            serve,
+        } => {
+            let (sqlite, scan_run_id) = scanner::run_images_analysis(&dir).await?;
 
-    let out_dir = report.clone().unwrap_or_else(|| dir.join("report"));
-    let result = analyze_and_maybe_serve(&dir, &out_dir, &model, serve.serve, serve.port);
+            let out_dir = report.clone().unwrap_or_else(|| dir.join("report"));
+            let result = analyze_and_maybe_serve(
+                &dir,
+                &out_dir,
+                &model,
+                serve.serve,
+                &serve.host,
+                serve.port,
+            );
 
-    match result {
-        Ok(()) => {
-            if let Err(e) = import_vision_csv_to_db(&sqlite, scan_run_id, &out_dir) {
-                let _ = sqlite.insert_event(&NewEvent {
-                    scan_run_id: Some(scan_run_id),
-                    level: "error".to_string(),
-                    component: "images".to_string(),
-                    message: "import predictions.csv to sqlite failed".to_string(),
-                    details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
-                });
+            match result {
+                Ok(()) => {
+                    if let Err(e) = import_vision_csv_to_db(&sqlite, scan_run_id, &out_dir) {
+                        let _ = sqlite.insert_event(&NewEvent {
+                            scan_run_id: Some(scan_run_id),
+                            level: "error".to_string(),
+                            component: "images".to_string(),
+                            message: "import predictions.csv to sqlite failed".to_string(),
+                            details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
+                        });
+                    }
+
+                    let _ = sqlite.finish_scan_run(scan_run_id, "success");
+                }
+                Err(e) => {
+                    let _ = sqlite.insert_event(&NewEvent {
+                        scan_run_id: Some(scan_run_id),
+                        level: "error".to_string(),
+                        component: "images".to_string(),
+                        message: "images analysis failed".to_string(),
+                        details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
+                    });
+                    let _ = sqlite.finish_scan_run(scan_run_id, "failed");
+                    return Err(e);
+                }
             }
-
-            let _ = sqlite.finish_scan_run(scan_run_id, "success");
         }
-        Err(e) => {
-            let _ = sqlite.insert_event(&NewEvent {
-                scan_run_id: Some(scan_run_id),
-                level: "error".to_string(),
-                component: "images".to_string(),
-                message: "images analysis failed".to_string(),
-                details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
-            });
-            let _ = sqlite.finish_scan_run(scan_run_id, "failed");
-            return Err(e);
-        }
-    }
-}
 
         Cmd::Assets { dir, out: _ } => {
             scanner::run_assets_analysis(&dir).await?;
@@ -653,58 +661,57 @@ if text.text_analyze {
             println!("Assets dir: {}", dir.display());
         }
 
-Cmd::TextAnalyze {
-    input,
-    model_dir,
-    out,
-    text_use_path_prefix,
-    text_max_length,
-} => {
-    let sqlite = SqliteStorage::open("webhound.db")?;
+        Cmd::TextAnalyze {
+            input,
+            model_dir,
+            out,
+            text_use_path_prefix,
+            text_max_length,
+        } => {
+            let sqlite = SqliteStorage::open("webhound.db")?;
 
-    let text_run_id = sqlite.create_scan_run(storage::NewScanRun {
-        target: ".".to_string(),
-        mode: "text_analyze".to_string(),
-        status: "running".to_string(),
-        config_json: None,
-    })?;
+            let text_run_id = sqlite.create_scan_run(NewScanRun {
+                target: ".".to_string(),
+                mode: "text_analyze".to_string(),
+                status: "running".to_string(),
+                config_json: None,
+            })?;
 
-    let result = annotate_text_from_db(
-        &sqlite,
-        text_run_id,
-        &model_dir,
-        text_use_path_prefix,
-        text_max_length,
-    );
+            let result = annotate_text_from_db(
+                &sqlite,
+                text_run_id,
+                &model_dir,
+                text_use_path_prefix,
+                text_max_length,
+            );
 
-    match result {
-        Ok(()) => {
-            let _ = sqlite.finish_scan_run(text_run_id, "success");
+            match result {
+                Ok(()) => {
+                    let _ = sqlite.finish_scan_run(text_run_id, "success");
 
-            // optional legacy output
-            if let Some(output_jsonl) = out {
-        annotate_sensitive_info(
-    &model_dir,
-    &input,
-    &output_jsonl,
-    text_use_path_prefix,
-    text_max_length,
-)?;
+                    if let Some(output_jsonl) = out {
+                        annotate_sensitive_info(
+                            &model_dir,
+                            &input,
+                            &output_jsonl,
+                            text_use_path_prefix,
+                            text_max_length,
+                        )?;
+                    }
+                }
+                Err(e) => {
+                    let _ = sqlite.insert_event(&NewEvent {
+                        scan_run_id: Some(text_run_id),
+                        level: "error".to_string(),
+                        component: "text_ml".to_string(),
+                        message: "text db annotation failed".to_string(),
+                        details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
+                    });
+                    let _ = sqlite.finish_scan_run(text_run_id, "failed");
+                    return Err(e);
+                }
             }
         }
-        Err(e) => {
-            let _ = sqlite.insert_event(&NewEvent {
-                scan_run_id: Some(text_run_id),
-                level: "error".to_string(),
-                component: "text_ml".to_string(),
-                message: "text db annotation failed".to_string(),
-                details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
-            });
-            let _ = sqlite.finish_scan_run(text_run_id, "failed");
-            return Err(e);
-        }
-    }
-}
     }
 
     Ok(())

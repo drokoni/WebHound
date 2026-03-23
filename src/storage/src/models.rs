@@ -127,3 +127,24 @@ pub struct ScreenshotRow {
     pub page_url: String,
     pub local_path: String,
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NewVisionPrediction {
+    pub scan_run_id: i64,
+    pub screenshot_id: Option<i64>,
+    pub local_path: String,
+    pub model_name: Option<String>,
+    pub model_version: Option<String>,
+    pub top_label: String,
+    pub top_prob: f64,
+    pub probs_json: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NewScreenshotAnnotation {
+    pub screenshot_id: Option<i64>,
+    pub local_path: String,
+    pub user_label: String,
+    pub analyst_note: Option<String>,
+    pub updated_by: Option<String>,
+}

@@ -1,19 +1,25 @@
 use anyhow::{anyhow, Result};
 use std::{
     fs,
+    io::Read,
     path::{Path, PathBuf},
 };
 
+use storage::{NewScreenshotAnnotation, SqliteStorage};
+
 pub fn server(out_dir: &Path, port: u16) -> Result<()> {
+    server_with_bind(out_dir, "0.0.0.0", port)
+}
+
+pub fn server_with_bind(out_dir: &Path, bind_host: &str, port: u16) -> Result<()> {
     use tiny_http::{Header, Method, Response, Server};
 
-    let server =
-        Server::http(format!("0.0.0.0:{port}")).map_err(|e| anyhow!("Server::http: {e}"))?;
+    let server = Server::http(format!("{bind_host}:{port}"))
+        .map_err(|e| anyhow!("Server::http: {e}"))?;
 
-    println!("Report available at: http://0.0.0.0:{port}/");
+    println!("Report available at: http://{bind_host}:{port}/");
     println!("Serving report from: {}", out_dir.display());
 
-    // roots = report/, parent/, grandparent/
     let mut roots: Vec<PathBuf> = vec![out_dir.to_path_buf()];
     if let Some(p) = out_dir.parent() {
         roots.push(p.to_path_buf());
@@ -21,10 +27,10 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             roots.push(gp.to_path_buf());
         }
     }
-    println!("File roots:");
-    for (i, r) in roots.iter().enumerate() {
-        println!("  {i}: {}", r.display());
-    }
+
+    let sqlite = find_sqlite_in_roots(&roots)
+        .map(SqliteStorage::open)
+        .transpose()?;
 
     fn add_header(resp: &mut Response<std::io::Cursor<Vec<u8>>>, k: &str, v: &str) {
         if let Ok(h) = Header::from_bytes(k, v) {
@@ -42,8 +48,14 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
         Response::from_data(s.into().into_bytes()).with_status_code(code)
     }
 
+    fn resp_json<T: serde::Serialize>(
+        code: u16,
+        value: &T,
+    ) -> Result<Response<std::io::Cursor<Vec<u8>>>> {
+        Ok(Response::from_data(serde_json::to_vec(value)?).with_status_code(code))
+    }
+
     fn sanitize_rel(mut s: &str) -> String {
-        // strip query/hash, leading '/'
         if let Some(p) = s.find('?') {
             s = &s[..p];
         }
@@ -52,12 +64,10 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
         }
         let mut s = s.trim_start_matches('/');
 
-        // IMPORTANT: remove any leading ../ (any count)
         while s.starts_with("../") {
             s = &s[3..];
         }
 
-        // disallow backslashes and ".." segments inside
         if s.contains('\\') {
             return String::new();
         }
@@ -88,7 +98,6 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             let k = it.next().unwrap_or("");
             let v = it.next().unwrap_or("");
             if k == key {
-                // percent decode
                 let dec = urlencoding::decode(v).ok()?.into_owned();
                 return Some(dec);
             }
@@ -111,9 +120,7 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
         out
     }
 
-    // Try to convert abs path to rel path under roots
     fn rel_from_abs(abs: &Path, roots: &[PathBuf]) -> Option<String> {
-        // try canonical (if exists), else raw
         let abs_can = abs.canonicalize().unwrap_or_else(|_| abs.to_path_buf());
 
         for root in roots {
@@ -136,7 +143,6 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
         let url = rq.url().to_string();
         let path_only = url.split('?').next().unwrap_or(&url);
 
-        // OPTIONS preflight for API
         if rq.method() == &Method::Options && path_only.starts_with("/api/") {
             let mut resp = Response::from_data(Vec::<u8>::new()).with_status_code(204);
             add_cors(&mut resp);
@@ -145,7 +151,215 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             continue;
         }
 
-        // API: save annotations.csv
+        if path_only == "/api/db/runs" && rq.method() == &Method::Get {
+            let Some(sqlite) = &sqlite else {
+                let mut resp = resp_text(404, "sqlite not found\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
+
+            match sqlite.list_scan_runs() {
+                Ok(rows) => {
+                    let mut resp = resp_json(200, &rows)?;
+                    add_cors(&mut resp);
+                    add_header(&mut resp, "Content-Type", "application/json; charset=utf-8");
+                    let _ = rq.respond(resp);
+                }
+                Err(e) => {
+                    let mut resp = resp_text(500, format!("500: {e}\n"));
+                    add_cors(&mut resp);
+                    let _ = rq.respond(resp);
+                }
+            }
+            continue;
+        }
+
+        if path_only == "/api/db/raw_findings" && rq.method() == &Method::Get {
+            let Some(sqlite) = &sqlite else {
+                let mut resp = resp_text(404, "sqlite not found\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
+
+            let Some(run_id) = get_query_param(&url, "run_id").and_then(|v| v.parse::<i64>().ok()) else {
+                let mut resp = resp_text(400, "missing ?run_id=\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
+
+            match sqlite.list_raw_findings_simple(run_id) {
+                Ok(rows) => {
+                    let mut resp = resp_json(200, &rows)?;
+                    add_cors(&mut resp);
+                    add_header(&mut resp, "Content-Type", "application/json; charset=utf-8");
+                    let _ = rq.respond(resp);
+                }
+                Err(e) => {
+                    let mut resp = resp_text(500, format!("500: {e}\n"));
+                    add_cors(&mut resp);
+                    let _ = rq.respond(resp);
+                }
+            }
+            continue;
+        }
+
+        if path_only == "/api/db/analysis_findings" && rq.method() == &Method::Get {
+            let Some(sqlite) = &sqlite else {
+                let mut resp = resp_text(404, "sqlite not found\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
+
+            let Some(run_id) = get_query_param(&url, "run_id").and_then(|v| v.parse::<i64>().ok()) else {
+                let mut resp = resp_text(400, "missing ?run_id=\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
+
+            match sqlite.list_analysis_findings_simple(run_id) {
+                Ok(rows) => {
+                    let mut resp = resp_json(200, &rows)?;
+                    add_cors(&mut resp);
+                    add_header(&mut resp, "Content-Type", "application/json; charset=utf-8");
+                    let _ = rq.respond(resp);
+                }
+                Err(e) => {
+                    let mut resp = resp_text(500, format!("500: {e}\n"));
+                    add_cors(&mut resp);
+                    let _ = rq.respond(resp);
+                }
+            }
+            continue;
+        }
+
+        if path_only == "/api/db/screenshots" && rq.method() == &Method::Get {
+            let Some(sqlite) = &sqlite else {
+                let mut resp = resp_text(404, "sqlite not found\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
+
+            let Some(run_id) = get_query_param(&url, "run_id").and_then(|v| v.parse::<i64>().ok()) else {
+                let mut resp = resp_text(400, "missing ?run_id=\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
+
+            match sqlite.list_screenshots_simple(run_id) {
+                Ok(rows) => {
+                    let mut resp = resp_json(200, &rows)?;
+                    add_cors(&mut resp);
+                    add_header(&mut resp, "Content-Type", "application/json; charset=utf-8");
+                    let _ = rq.respond(resp);
+                }
+                Err(e) => {
+                    let mut resp = resp_text(500, format!("500: {e}\n"));
+                    add_cors(&mut resp);
+                    let _ = rq.respond(resp);
+                }
+            }
+            continue;
+        }
+
+        if path_only.starts_with("/api/db/screenshots/") && path_only.ends_with("/label") && rq.method() == &Method::Post {
+            let Some(sqlite) = &sqlite else {
+                let mut resp = resp_text(404, "sqlite not found\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
+
+            let id_part = path_only
+                .trim_start_matches("/api/db/screenshots/")
+                .trim_end_matches("/label");
+
+            let screenshot_id = match id_part.parse::<i64>() {
+                Ok(v) => v,
+                Err(_) => {
+                    let mut resp = resp_text(400, "bad screenshot id\n");
+                    add_cors(&mut resp);
+                    let _ = rq.respond(resp);
+                    continue;
+                }
+            };
+
+            let mut body = String::new();
+            rq.as_reader().read_to_string(&mut body).ok();
+
+            let parsed: serde_json::Value = match serde_json::from_str(&body) {
+                Ok(v) => v,
+                Err(e) => {
+                    let mut resp = resp_text(400, format!("bad json: {e}\n"));
+                    add_cors(&mut resp);
+                    let _ = rq.respond(resp);
+                    continue;
+                }
+            };
+
+            let user_label = parsed
+                .get("user_label")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+
+            let analyst_note = parsed
+                .get("analyst_note")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let updated_by = parsed
+                .get("updated_by")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let local_path = parsed
+                .get("local_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            if user_label.is_empty() {
+                let mut resp = resp_text(400, "missing user_label\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            }
+
+            sqlite.update_screenshot_user_label(
+                screenshot_id,
+                &user_label,
+                analyst_note.as_deref(),
+                updated_by.as_deref(),
+            )?;
+
+            if !local_path.trim().is_empty() {
+                let shot = sqlite.find_screenshot_by_local_path(&local_path)?;
+                sqlite.insert_screenshot_annotation(&NewScreenshotAnnotation {
+                    screenshot_id: shot.as_ref().map(|s| s.id),
+                    local_path: local_path.clone(),
+                    user_label: user_label.clone(),
+                    analyst_note: analyst_note.clone(),
+                    updated_by: updated_by.clone(),
+                })?;
+            }
+
+            let ann_path = out_dir.join("annotations.csv");
+            export_annotations_csv_from_db(sqlite, &ann_path)?;
+
+            let mut resp = resp_text(200, "ok\n");
+            add_cors(&mut resp);
+            let _ = rq.respond(resp);
+            continue;
+        }
+
         if path_only == "/api/annotations" && rq.method() == &Method::Post {
             let mut body = String::new();
             rq.as_reader().read_to_string(&mut body).ok();
@@ -153,7 +367,6 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             if body.len() > 20 * 1024 * 1024 {
                 let mut resp = resp_text(413, "413\n");
                 add_cors(&mut resp);
-                add_header(&mut resp, "Content-Type", "text/plain; charset=utf-8");
                 let _ = rq.respond(resp);
                 continue;
             }
@@ -161,25 +374,19 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             let ann_path = out_dir.join("annotations.csv");
             let tmp_path = out_dir.join("annotations.csv.tmp");
 
-            if let Err(e) =
-                fs::write(&tmp_path, body.as_bytes()).and_then(|_| fs::rename(&tmp_path, &ann_path))
-            {
-                let mut resp = resp_text(500, format!("500: {e}\n"));
-                add_cors(&mut resp);
-                add_header(&mut resp, "Content-Type", "text/plain; charset=utf-8");
-                let _ = rq.respond(resp);
-                continue;
+            fs::write(&tmp_path, body.as_bytes()).and_then(|_| fs::rename(&tmp_path, &ann_path))?;
+
+            if let Some(sqlite) = &sqlite {
+                sync_annotations_csv_to_db(&ann_path, sqlite)?;
+                export_annotations_csv_from_db(sqlite, &ann_path)?;
             }
 
             let mut resp = resp_text(200, "ok\n");
             add_cors(&mut resp);
-            add_header(&mut resp, "Content-Type", "text/plain; charset=utf-8");
             let _ = rq.respond(resp);
             continue;
         }
 
-        // API: serve jsonl (ndjson)
-        // GET /api/jsonl?file=../../sensitive_info.post.jsonl
         if path_only == "/api/jsonl" && rq.method() == &Method::Get {
             let file = get_query_param(&url, "file")
                 .or_else(|| get_query_param(&url, "path"))
@@ -188,17 +395,14 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             if file.trim().is_empty() {
                 let mut resp = resp_text(400, "missing ?file=\n");
                 add_cors(&mut resp);
-                add_header(&mut resp, "Content-Type", "text/plain; charset=utf-8");
                 let _ = rq.respond(resp);
                 continue;
             }
 
-            // allow ../.. in UI, but we sanitize and search in roots
             let rel = sanitize_rel(file.trim());
             if rel.is_empty() {
                 let mut resp = resp_text(400, "bad file path\n");
                 add_cors(&mut resp);
-                add_header(&mut resp, "Content-Type", "text/plain; charset=utf-8");
                 let _ = rq.respond(resp);
                 continue;
             }
@@ -206,41 +410,24 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             let Some(fs_path) = find_in_roots(&rel, &roots) else {
                 let mut resp = resp_text(404, "not found\n");
                 add_cors(&mut resp);
-                add_header(&mut resp, "Content-Type", "text/plain; charset=utf-8");
                 let _ = rq.respond(resp);
                 continue;
             };
 
-            let bytes = match fs::read(&fs_path) {
-                Ok(b) => b,
-                Err(e) => {
-                    let mut resp = resp_text(500, format!("500: {e}\n"));
-                    add_cors(&mut resp);
-                    add_header(&mut resp, "Content-Type", "text/plain; charset=utf-8");
-                    let _ = rq.respond(resp);
-                    continue;
-                }
-            };
+            let bytes = fs::read(&fs_path)?;
 
             let mut resp = Response::from_data(bytes).with_status_code(200);
             add_cors(&mut resp);
-            add_header(
-                &mut resp,
-                "Content-Type",
-                "application/x-ndjson; charset=utf-8",
-            );
+            add_header(&mut resp, "Content-Type", "application/x-ndjson; charset=utf-8");
             let _ = rq.respond(resp);
             continue;
         }
 
-        // API: map abs file path -> rel url under roots (best-effort)
-        // GET /api/relpath?abs=file:///home/user/work/ml/dataset/html/a.html
         if path_only == "/api/relpath" && rq.method() == &Method::Get {
             let abs_raw = get_query_param(&url, "abs").unwrap_or_default();
             if abs_raw.trim().is_empty() {
                 let mut resp = resp_text(400, "missing ?abs=\n");
                 add_cors(&mut resp);
-                add_header(&mut resp, "Content-Type", "text/plain; charset=utf-8");
                 let _ = rq.respond(resp);
                 continue;
             }
@@ -265,7 +452,6 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             continue;
         }
 
-        // -------- static files --------
         let mut req_path = path_only.trim_start_matches('/').to_string();
         if req_path.is_empty() || req_path.ends_with('/') {
             req_path.push_str("index.html");
@@ -274,7 +460,6 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
         let req_path = sanitize_rel(&req_path);
         if req_path.is_empty() {
             let mut resp = resp_text(400, "400\n");
-            add_header(&mut resp, "Content-Type", "text/plain; charset=utf-8");
             let _ = rq.respond(resp);
             continue;
         }
@@ -290,7 +475,6 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
             resp_text(404, "404\n")
         };
 
-        // mime
         let mime = if req_path.ends_with(".html") {
             Some("text/html; charset=utf-8")
         } else if req_path.ends_with(".csv") {
@@ -320,5 +504,101 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
         let _ = rq.respond(resp);
     }
 
+    Ok(())
+}
+
+fn find_sqlite_in_roots(roots: &[PathBuf]) -> Option<PathBuf> {
+    for r in roots {
+        let p = r.join("webhound.db");
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+fn sync_annotations_csv_to_db(path: &Path, sqlite: &SqliteStorage) -> Result<()> {
+    let mut rdr = csv::Reader::from_path(path)?;
+    let headers = rdr.headers()?.clone();
+
+    let path_idx = headers
+        .iter()
+        .position(|h| matches!(h, "file" | "path" | "image" | "local_path"))
+        .ok_or_else(|| anyhow!("annotations.csv: no file/path/local_path column"))?;
+
+    let label_idx = headers
+        .iter()
+        .position(|h| matches!(h, "label" | "user_label" | "class"))
+        .ok_or_else(|| anyhow!("annotations.csv: no label column"))?;
+
+    let note_idx = headers.iter().position(|h| matches!(h, "note" | "analyst_note"));
+    let updated_by_idx = headers.iter().position(|h| matches!(h, "updated_by" | "user" | "who"));
+
+    for rec in rdr.records() {
+        let rec = rec?;
+        let local_path = rec.get(path_idx).unwrap_or("").to_string();
+        let user_label = rec.get(label_idx).unwrap_or("").trim().to_string();
+
+        if local_path.is_empty() || user_label.is_empty() {
+            continue;
+        }
+
+        let analyst_note = note_idx.and_then(|i| rec.get(i)).map(|s| s.to_string());
+        let updated_by = updated_by_idx.and_then(|i| rec.get(i)).map(|s| s.to_string());
+
+        if let Some(shot) = sqlite.find_screenshot_by_local_path(&local_path)? {
+            sqlite.update_screenshot_user_label(
+                shot.id,
+                &user_label,
+                analyst_note.as_deref(),
+                updated_by.as_deref(),
+            )?;
+        }
+
+        let shot = sqlite.find_screenshot_by_local_path(&local_path)?;
+        sqlite.insert_screenshot_annotation(&NewScreenshotAnnotation {
+            screenshot_id: shot.as_ref().map(|s| s.id),
+            local_path: local_path.clone(),
+            user_label: user_label.clone(),
+            analyst_note: analyst_note.clone(),
+            updated_by: updated_by.clone(),
+        })?;
+    }
+
+    Ok(())
+}
+
+fn export_annotations_csv_from_db(sqlite: &SqliteStorage, out_csv: &Path) -> Result<()> {
+    let runs = sqlite.list_scan_runs()?;
+    let latest_run = runs.into_iter().next().map(|r| r.0);
+
+    let Some(run_id) = latest_run else {
+        if let Some(parent) = out_csv.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut wtr = csv::Writer::from_path(out_csv)?;
+        wtr.write_record(["local_path", "user_label", "analyst_note"])?;
+        wtr.flush()?;
+        return Ok(());
+    };
+
+    let rows = sqlite.list_screenshots_simple(run_id)?;
+
+    if let Some(parent) = out_csv.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut wtr = csv::Writer::from_path(out_csv)?;
+    wtr.write_record(["local_path", "user_label"])?;
+
+    for (_id, _page_url, local_path, _ml_label, _ml_score, user_label) in rows {
+        if let Some(label) = user_label {
+            if !label.trim().is_empty() {
+                wtr.write_record([local_path, label])?;
+            }
+        }
+    }
+
+    wtr.flush()?;
     Ok(())
 }
