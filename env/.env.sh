@@ -105,11 +105,11 @@ main() {
 
     local vision_model text_model_dir text_model text_metadata text_tokenizer
 
-    vision_model="$(resolve_if_exists "${repo_abs}/assets/ml/eyeballer.onnx" || true)"
-    text_model_dir="$(resolve_if_exists "${repo_abs}/assets/ml/text_secret_classifier" || true)"
-    text_model="$(resolve_if_exists "${repo_abs}/assets/ml/text_secret_classifier/model.onnx" || true)"
-    text_metadata="$(resolve_if_exists "${repo_abs}/assets/ml/text_secret_classifier/export_metadata.json" || true)"
-    text_tokenizer="$(resolve_if_exists "${repo_abs}/assets/ml/text_secret_classifier/tokenizer/tokenizer.json" || true)"
+    vision_model="$(resolve_if_exists "${repo_abs}/src/asset/ml/eyeballer.onnx" || true)"
+    text_model_dir="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier" || true)"
+    text_model="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier/model.onnx" || true)"
+    text_metadata="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier/export_metadata.json" || true)"
+    text_tokenizer="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier/tokenizer/tokenizer.json" || true)"
 
     local out="${repo_abs}/${OUT_NAME}"
 
