@@ -6,4 +6,5 @@
 WebHound.zip
 .env
 /ml
-/assets/ml
+/assets/ml/
+/asset/ml/text_secret_classifier/

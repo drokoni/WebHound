@@ -1,5 +1,6 @@
 use crate::net::fetch_live_or_wayback;
 use crate::screenshot::make_screenshot_task;
+use crate::sensitive_jsonl::{write_samples_from_text_jsonl, SensitiveSink};
 
 use core::analysis::PathsLike;
 use core::patterns::{scan_patterns, should_ignore_path, ScanHit};
@@ -14,9 +15,8 @@ use std::{
     fs::File,
     io::Read,
     path::{Path, PathBuf},
-    sync::Arc,
 };
-use tokio::{sync::Mutex, task};
+use tokio::task;
 use url::Url;
 
 /// Текстовые расширения (то, что имеет смысл гонять через PATTERNS/regex).
@@ -32,7 +32,7 @@ pub async fn process_single_url(
     client: &Client,
     url: &str,
     paths: &impl PathsLike,
-    info_file: &Arc<Mutex<File>>,
+    sink: &SensitiveSink,
 ) -> AnyResult<()> {
     if should_ignore_path(url) {
         return Ok(());
@@ -46,7 +46,7 @@ pub async fn process_single_url(
         }
     };
 
-    handle_response_for_url(client, &final_url, body, paths, info_file).await;
+    handle_response_for_url(client, &final_url, body, paths, sink).await;
     Ok(())
 }
 
@@ -55,12 +55,8 @@ async fn handle_response_for_url(
     final_url: &str,
     body: Vec<u8>,
     paths: &impl PathsLike,
-    info_file: &Arc<Mutex<File>>,
+    sink: &SensitiveSink,
 ) {
-    // ext:
-    // - если URL содержит ext — используем
-    // - если ext нет, но это HTML — считаем html
-    // - иначе bin
     let ext = detect_ext(final_url)
         .or_else(|| {
             if looks_like_html(&body) {
@@ -71,31 +67,26 @@ async fn handle_response_for_url(
         })
         .unwrap_or_else(|| "bin".to_string());
 
-    // сохраняем в assets/<ext>/... (папка под каждое расширение)
     let save_path = asset_path_for(final_url, &ext, paths);
     if let Err(e) = save_bytes_safe(&save_path, &body) {
         eprintln!("[!] Ошибка сохранения {final_url}: {e}");
     }
 
-    // анализ по правилам (текст + lossy decode)
-    if let Err(e) = analyze_bytes_with_rules(&body, final_url, &ext, info_file).await {
+    if let Err(e) = analyze_bytes_with_rules(&body, final_url, &ext, sink).await {
         eprintln!("[!] Ошибка анализа содержимого {final_url}: {e}");
     }
 
-    // анализ архивов
     if ARCHIVE_EXTS.contains(&ext.as_str()) {
-        if let Err(e) = analyze_archive_file(&save_path, final_url, paths, info_file).await {
+        if let Err(e) = analyze_archive_file(&save_path, final_url, paths, sink).await {
             eprintln!("[!] Ошибка анализа архива {final_url}: {e}");
         }
     }
 
-    // HTML: парсим и извлекаем ссылки, даже если ext странный, но sniff говорит HTML
     if is_html_ext(&ext) || looks_like_html(&body) {
         let text = String::from_utf8_lossy(&body);
-        handle_html_links(client, final_url, &text, paths, info_file).await;
+        handle_html_links(client, final_url, &text, paths, sink).await;
     }
 
-    // скриншот (если хочешь — можно отключать флагом в CLI, но тут оставляем как есть)
     spawn_screenshot(final_url, paths);
 }
 
@@ -104,7 +95,7 @@ async fn handle_html_links(
     base_url: &str,
     html: &str,
     paths: &impl PathsLike,
-    info_file: &Arc<Mutex<File>>,
+    sink: &SensitiveSink,
 ) {
     let mut urls = extract_links(html, base_url);
 
@@ -143,12 +134,12 @@ async fn handle_html_links(
                     eprintln!("[!] Ошибка сохранения {real_u}: {e}");
                 }
 
-                if let Err(e) = analyze_bytes_with_rules(&data, &real_u, &ext, info_file).await {
+                if let Err(e) = analyze_bytes_with_rules(&data, &real_u, &ext, sink).await {
                     eprintln!("[!] Ошибка анализа содержимого {real_u}: {e}");
                 }
 
                 if ARCHIVE_EXTS.contains(&ext.as_str()) {
-                    if let Err(e) = analyze_archive_file(&path, &real_u, paths, info_file).await {
+                    if let Err(e) = analyze_archive_file(&path, &real_u, paths, sink).await {
                         eprintln!("[!] Ошибка анализа архива {real_u}: {e}");
                     }
                 }
@@ -519,7 +510,7 @@ async fn analyze_bytes_with_rules(
     bytes: &[u8],
     url: &str,
     ext: &str,
-    info_file: &Arc<Mutex<File>>,
+    sink: &SensitiveSink,
 ) -> AnyResult<()> {
     let ext_lc = ext.to_ascii_lowercase();
     let should_try_text =
@@ -529,24 +520,14 @@ async fn analyze_bytes_with_rules(
         return Ok(());
     }
 
-    let text = String::from_utf8_lossy(bytes);
+    let text = String::from_utf8_lossy(bytes).to_string();
 
     let hits = scan_patterns(&text);
     if hits.is_empty() {
         return Ok(());
     }
 
-    let json_lines = hits_to_jsonl_lines(url, &text, &hits);
-    if json_lines.is_empty() {
-        return Ok(());
-    }
-
-    use std::io::Write;
-    let mut f = info_file.lock().await;
-    for jl in json_lines {
-        writeln!(f, "{jl}")?;
-    }
-
+    write_samples_from_text_jsonl(sink, url, &text).await?;
     Ok(())
 }
 
@@ -574,13 +555,12 @@ async fn analyze_archive_file(
     archive_path: &Path,
     base_url: &str,
     paths: &impl PathsLike,
-    info_file: &Arc<Mutex<File>>,
+    sink: &SensitiveSink,
 ) -> AnyResult<()> {
     let archive_path = archive_path.to_path_buf();
     let assets_root = paths.assets_dir().to_path_buf();
     let base_for_spawn = base_url.to_string();
 
-    // В blocking-потоке собираем сразу JSONL строки (чтобы не тащить async внутрь)
     let json_lines = task::spawn_blocking(move || -> AnyResult<Vec<String>> {
         let ext = archive_path
             .extension()
@@ -610,10 +590,9 @@ async fn analyze_archive_file(
         return Ok(());
     }
 
-    use std::io::Write;
-    let mut f = info_file.lock().await;
     for jl in json_lines {
-        writeln!(f, "{jl}")?;
+        let sample: crate::sensitive_jsonl::Sample = serde_json::from_str(&jl)?;
+        sink.write_sample(&sample).await?;
     }
 
     Ok(())

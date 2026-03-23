@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 core = { path = "../core" }
+storage = { path = "../storage" }
+
 anyhow = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros","sync"] }
 tracing = "0.1"
@@ -26,3 +28,4 @@ bzip2 = "0.4"
 xz2 = "0.1"
 rand = "0.8"
 serde = {version = "1.0.228", features = ["derive"]}
+chrono = { version = "0.4", features = ["serde"] }
