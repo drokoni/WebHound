@@ -179,3 +179,84 @@ pub async fn run_scan(domain: &str) -> Result<Paths> {
         }
     }
 }
+
+pub async fn run_assets_analysis(dir: &Path) -> Result<()> {
+    let base = if dir.file_name().and_then(|s| s.to_str()) == Some("assets") {
+        dir.parent()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| dir.to_path_buf())
+    } else {
+        dir.to_path_buf()
+    };
+
+    fs::create_dir_all(&base)?;
+
+    let sqlite = SqliteStorage::open(base.join("webhound.db"))?;
+    let scan_run_id = sqlite.create_scan_run(NewScanRun {
+        target: base.display().to_string(),
+        mode: "assets".to_string(),
+        status: "running".to_string(),
+        config_json: None,
+    })?;
+
+    let out_file = if dir.file_name().and_then(|s| s.to_str()) == Some("assets") {
+        base.join("sensitive_info.post.jsonl")
+    } else {
+        dir.join("sensitive_info.post.jsonl")
+    };
+
+    let info_file = Arc::new(Mutex::new(
+        File::options()
+            .create(true)
+            .append(true)
+            .open(&out_file)?,
+    ));
+
+    let sink = SensitiveSink::new(
+        Some(info_file),
+        Some(sqlite.clone()),
+        Some(scan_run_id),
+    );
+
+    let result = postfilter::postfilter_assets_dir(dir, &sink).await;
+
+    match result {
+        Ok(()) => {
+            let _ = sqlite.finish_scan_run(scan_run_id, "success");
+            Ok(())
+        }
+        Err(e) => {
+            let _ = sqlite.insert_event(&NewEvent {
+                scan_run_id: Some(scan_run_id),
+                level: "error".to_string(),
+                component: "assets".to_string(),
+                message: "assets analysis failed".to_string(),
+                details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
+            });
+            let _ = sqlite.finish_scan_run(scan_run_id, "failed");
+            Err(e)
+        }
+    }
+}
+
+pub async fn run_images_analysis(dir: &Path) -> Result<(SqliteStorage, i64)> {
+    let base = if dir.file_name().and_then(|s| s.to_str()) == Some("screenshots") {
+        dir.parent()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| dir.to_path_buf())
+    } else {
+        dir.to_path_buf()
+    };
+
+    fs::create_dir_all(&base)?;
+
+    let sqlite = SqliteStorage::open(base.join("webhound.db"))?;
+    let scan_run_id = sqlite.create_scan_run(NewScanRun {
+        target: base.display().to_string(),
+        mode: "images".to_string(),
+        status: "running".to_string(),
+        config_json: None,
+    })?;
+
+    Ok((sqlite, scan_run_id))
+}

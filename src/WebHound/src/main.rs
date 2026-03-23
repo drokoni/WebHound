@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use scanner::run_scan;
 use std::{fs, path::PathBuf, time::Duration};
+use storage::NewEvent;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -183,8 +184,8 @@ enum Cmd {
     },
 
     /// Полный скан: CDX → скачивание → assets → secrets → screenshots (+ опц. ML-отчёт)
-#[command(
-    after_help = r#"Examples:
+    #[command(
+        after_help = r#"Examples:
   source ./.env
   WebHound scan example.com
   WebHound scan example.com --limit 500
@@ -192,7 +193,7 @@ enum Cmd {
   WebHound scan example.com --text-analyze --text-model-dir "$WEBHOUND_TEXT_MODEL_DIR"
   WebHound scan example.com --analyze --model "$WEBHOUND_VISION_MODEL" --text-analyze --text-model-dir "$WEBHOUND_TEXT_MODEL_DIR" --serve
 "#
-)]
+    )]
     Scan {
         /// Цель скана
         #[arg(value_name = "TARGET")]
@@ -458,26 +459,33 @@ async fn main() -> Result<()> {
             batch: _,
             serve,
         } => {
+            let (sqlite, scan_run_id) = scanner::run_images_analysis(&dir).await?;
+
             let out_dir = report.clone().unwrap_or_else(|| dir.join("report"));
-            analyze_and_maybe_serve(&dir, &out_dir, &model, serve.serve, serve.port)?;
+            let result = analyze_and_maybe_serve(&dir, &out_dir, &model, serve.serve, serve.port);
+
+            match result {
+                Ok(()) => {
+                    let _ = sqlite.finish_scan_run(scan_run_id, "success");
+                }
+                Err(e) => {
+                    let _ = sqlite.insert_event(&NewEvent {
+                        scan_run_id: Some(scan_run_id),
+                        level: "error".to_string(),
+                        component: "images".to_string(),
+                        message: "images analysis failed".to_string(),
+                        details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
+                    });
+                    let _ = sqlite.finish_scan_run(scan_run_id, "failed");
+                    return Err(e);
+                }
+            }
         }
 
-        Cmd::Assets { dir, out } => {
-            let out_file = out.unwrap_or_else(|| {
-                if dir.file_name().and_then(|s| s.to_str()) == Some("assets") {
-                    dir.parent()
-                        .unwrap_or(&dir)
-                        .join("sensitive_info.post.jsonl")
-                } else {
-                    dir.join("sensitive_info.post.jsonl")
-                }
-            });
-
-            scanner::postfilter::postfilter_assets_dir_to_file(&dir, &out_file).await?;
-
+        Cmd::Assets { dir, out: _ } => {
+            scanner::run_assets_analysis(&dir).await?;
             println!("Assets postfilter done.");
             println!("Assets dir: {}", dir.display());
-            println!("Output: {}", out_file.display());
         }
 
         Cmd::TextAnalyze {

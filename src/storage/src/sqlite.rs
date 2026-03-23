@@ -398,4 +398,49 @@ CREATE INDEX IF NOT EXISTS idx_events_run ON events(scan_run_id);
         )?;
         Ok(())
     }
+    pub fn upsert_screenshot_ml_only(
+    &self,
+    scan_run_id: i64,
+    page_url: &str,
+    local_path: &str,
+    model_name: &str,
+    model_version: Option<&str>,
+    ml_label: &str,
+    ml_score: f64,
+    ml_scores_json: &str,
+) -> Result<()> {
+    let now = Utc::now().to_rfc3339();
+    let conn = self.conn.lock().expect("sqlite mutex poisoned");
+
+    conn.execute(
+        r#"
+        INSERT INTO screenshots (
+            scan_run_id,
+            page_url,
+            local_path,
+            ml_model_name,
+            ml_model_version,
+            ml_label,
+            ml_score,
+            ml_scores_json,
+            created_at,
+            updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
+        "#,
+        params![
+            scan_run_id,
+            page_url,
+            local_path,
+            model_name,
+            model_version,
+            ml_label,
+            ml_score,
+            ml_scores_json,
+            now
+        ],
+    )?;
+
+    Ok(())
 }
+}
+
