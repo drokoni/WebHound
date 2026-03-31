@@ -70,201 +70,243 @@ source "Path/WebHound/.env"
 
 # Режимы работы
 
-## 1. scan
+## 1. `scan`
 
-#### Синтаксис
+Основной режим сканирования.
 
-```bash
-webhound scan <TARGET> [опции CDX] [опции анализа]
-```
-
-#### Что делает (по факту кода)
-
-1. Берёт список URL из Wayback CDX и пишет `out.txt`
-2. Скачивает страницы/ресурсы (live, иначе Wayback), складывает в `assets/<ext>/…`
-3. Прогоняет правила поиска секретов и пишет находки в `sensitive_info.jsonl`
-4. Делает скриншоты в `screenshots/`
-5. В конце делает **postfilter**: повторно проходит по `assets/` и дописывает находки в тот же `sensitive_info.jsonl`
-6. Если `--analyze` — строит ML-отчёт по скриншотам и (если `--serve`) запускает сервер.
-
-**ВАЖНО про `<TARGET>`**
-
-- В текущей реализации `<TARGET>` используется как **имя папки результата** буквально.  
-   Поэтому лучше передавать **просто домен**, например `example.com` (без `https://`), иначе можно случайно создать вложенные папки из-за `/`.
-
-**Что создаётся**  
-В папке `<TARGET>/`:
-
-- `out.txt` — URL из CDX
-- `subdomains.txt` — найденные поддомены
-- `assets/` — скачанные файлы по расширениям
-- `screenshots/` — PNG скриншоты
-- `sensitive_info.jsonl` — находки секретов (JSONL/NDJSON)
-
-#### CDX
-
-- `--match-type <STRING>` (default: `domain`)  
-   Как CDX матчить адреса. Обычно:
-  - `domain` — домен + поддомены
-  - `host` — только конкретный хост
-  - (другие значения зависят от CDX)
-- `--limit <N>`  
-   Ограничить число URL, которые вернёт CDX.
-- `--no-collapse`  
-   По умолчанию включён `collapse=urlkey` (склеивает дубли). Этот флаг **отключает** collapse.
-- `--no-filter-200`  
-   По умолчанию фильтр `statuscode:200` включён. Этот флаг **разрешает** не-200.
-- `--no-filter-html`  
-   По умолчанию фильтр `mimetype:text/html` включён. Этот флаг **разрешает** не-html (js/css/pdf/и т.д.).
-- `--timeout-s <SECONDS>` (default: `30`)  
-   Таймаут HTTP-клиента (в секундах).
-- `--retries <N>` (default: `6`)  
-   Сколько раз ретраить при 429/5xx/сетевых ошибках.
-
-#### Fallback по годам (только если включить)
-
-- `--year-fallback`  
-   Если основной доменный запрос CDX “падает”, скрипт пробует собирать URL **по годам** и склеивать результаты.
-- `--year-from <YYYY>` (default: `2018`)
-- `--year-to <YYYY>` (default: `2025`)
-
-#### Опции анализа (ML / отчёт)
-
-- `--analyze`  
-   Включить ML-анализ скриншотов и генерацию отчёта.
-- `--model <PATH>` (default: `assets/ml/eyeballer.onnx`)  
-   Путь к ONNX-модели.
-- `--report <DIR>`  
-   Куда писать отчёт.
-- `--batch <N>` (default: `32`)  
-   Сейчас в коде **не используется** (зарезервировано).
-- `--serve`  
-   После генерации отчёта сразу поднять HTTP-сервер.
-- `--port <PORT>` (default: `8000`)  
-   Порт для сервера.
-
-## 2. images (Анализ локальной папки со скриншотами)
-
-#### Синтаксис
+Синтаксис:
 
 ```bash
-webhound images <DIR> [опции]
+webhound scan <TARGET> [CDX options] [report options] [text options] [serve options] [storage options]
 ```
 
-#### Что делает
-
-- Берёт изображения из `<DIR>`, прогоняет через ONNX-модель, генерирует:
-  - `predictions.csv`
-  - `index.html`
-  - (и при необходимости `annotations.csv`)
-- Опционально поднимает сервер.
-
-#### Аргументы
-
-- `<DIR>` — папка с изображениями (обычно `…/screenshots`).
-
-#### Опции
-
-- `--analyze`  
-   Сейчас **не влияет** (в режиме `images` анализ и так всегда выполняется).
-- `--model <PATH>` (default: `assets/ml/eyeballer.onnx`)
-- `--report <DIR>`  
-   Куда писать отчёт. По умолчанию: `<DIR>/report` (и это как раз “правильный” layout).
-- `--batch <N>` (default: `32`)  
-   Сейчас **не используется**.
-- `--serve`
-- `--port <PORT>` (default: `8000`)
-
-## 3. assets (Пост-анализ папки assets)
-
-#### Синтаксис
+Примеры:
 
 ```bash
-webhound assets <DIR> [--out <FILE>]
+webhound scan example.com --storage files
+webhound scan example.com --limit 500 --storage files
+webhound scan example.com --storage db --analyze --model assets/ml/eyeballer.onnx
+webhound scan example.com --storage db --text-analyze --text-model-dir /path/to/text-model
+webhound scan example.com --storage db --analyze --text-analyze --text-model-dir /path/to/text-model --serve
 ```
 
-#### Что делает
+Что делает команда:
 
-- Рекурсивно проходит по папке `<DIR>`, берёт “похожие на текст” файлы (с ограничением чтения), прогоняет правила и пишет JSONL.
+1. получает список URL из Wayback CDX;
+2. скачивает HTML и связанные ресурсы в `assets/`;
+3. делает скриншоты страниц в `screenshots/`;
+4. ищет потенциально чувствительные данные в процессе загрузки;
+5. повторно анализирует `assets/` постфильтром;
+6. по флагам запускает анализ изображений и/или текстовый ML-анализ.
 
-#### Аргументы
+Практически важно, что `<TARGET>` используется и как идентификатор цели, и как имя рабочей директории. Поэтому безопаснее передавать домен или короткое имя каталога, например `example.com`, а не полный URL с `/`.
 
-- `<DIR>` — папка с файлами (часто это `…/<TARGET>/assets`).
+### CDX options
 
-#### Опции
+`--match-type <domain|host>` — как сопоставлять адреса в CDX. По умолчанию используется `domain`.
 
-- `--out <FILE>` — куда писать результат.
+`--limit <N>` — ограничение числа URL.
 
-#### Вывод по умолчанию (если `--out` не задан)
+`--no-collapse` — отключает `collapse=urlkey`.
 
-- Если `<DIR>` называется ровно `assets`, то файл будет рядом:
-  - `…/<TARGET>/sensitive_info.post.jsonl`
-- Иначе:
-  - `<DIR>/sensitive_info.post.jsonl`
+`--no-filter-200` — разрешает ответы с кодами, отличными от 200.
 
-## 4. serv (Поднять HTTP-сервер для готового отчёта)
+`--no-filter-html` — разрешает выдачу не только HTML-ресурсов.
+
+`--timeout-s <SEC>` — таймаут HTTP-клиента. По умолчанию `30`.
+
+`--retries <N>` — число повторных попыток. По умолчанию `6`.
+
+`--year-fallback` — включает запасной режим выборки CDX по годам.
+
+`--year-from <YYYY>` и `--year-to <YYYY>` — границы fallback-периода. По умолчанию `2018..2025`.
+
+### Report / ML options
+
+`--analyze` — запускает анализ скриншотов и формирование HTML-отчёта.
+
+`--model <PATH>` — путь к vision ONNX-модели. По умолчанию `assets/ml/eyeballer.onnx`.
+
+`--report <DIR>` — каталог отчёта.
+
+Поскольку генератор отчёта ожидает layout вида `screenshots/report`, безопаснее использовать либо значение по умолчанию, либо путь непосредственно внутри каталога со скриншотами.
+
+### Text options
+
+`--text-analyze` — включает текстовую классификацию.
+
+`--text-model-dir <DIR>` — каталог текстовой ONNX-модели.
+
+`--text-input <FILE>` — входной JSONL для файлового режима внутри `scan`. Если не задан, используется `sensitive_info.jsonl`.
+
+`--text-output <FILE>` — выходной JSONL для файлового режима. Если не задан, создаётся файл с суффиксом `.ml.jsonl`.
+
+`--text-use-path-prefix` — добавляет путь файла в текст, который подаётся в модель.
+
+`--text-max-length <N>` — максимальная длина токенизированного текста. По умолчанию `192`.
+
+### Serve options
+
+`--serve` — поднять HTTP-сервер после генерации отчёта.
+
+`--host <HOST>` — адрес привязки. По умолчанию `127.0.0.1`.
+
+`--port <PORT>` — порт. По умолчанию `8000`.
+
+### Storage options
+
+`--storage <files|db>` — режим записи результатов. По умолчанию `files`.
+
+Если выбран `files`, текстовый анализ в `scan` работает с JSONL-файлами.
+
+Если выбран `db`, текстовый анализ пишет результат в SQLite как отдельный `scan_run` режима `text_analyze`.
+
+## 2. `images`
+
+Анализ каталога со скриншотами и генерация отчёта.
+
+Синтаксис:
 
 ```bash
-WebHound serv <REPORT_DIR> [--port <PORT>]
+webhound images <DIR> [options]
 ```
 
-#### Что делает
-
-- Поднимает HTTP-сервер и раздаёт `index.html` + файлы отчёта из указанной папки.
-- Сервер также отдаёт файлы из **родительской** и **прародительской** папки отчёта (удобно, чтобы HTML мог подтягивать картинки/JSONL рядом).
-
-#### Аргументы
-
-- `<REPORT_DIR>` — папка, где лежит отчёт (`index.html`, `predictions.csv`, `annotations.csv`).
-
-#### Опции
-
-- `--port <PORT>` — порт (по умолчанию `8000`).
-
-## 5. cdx (Вывести URL’ы из Wayback CDX для домена - опционально)
-
-#### Синтаксис
+Примеры:
 
 ```bash
-webhound cdx <DOMAIN> [опции] [--out <FILE>]
+webhound images ./example.com/screenshots --storage files
+webhound images ./example.com/screenshots --storage db --model assets/ml/eyeballer.onnx --serve
+webhound images ./example.com/screenshots --storage db --report ./example.com/screenshots/report
 ```
 
-#### Что делает
+Что делает команда:
 
-- Запрашивает Wayback CDX и возвращает список URL (по одному на строку).
-- Может работать “устойчиво” через **fallback по годам** (если включить флаг).
+- запускает vision-модель по всем поддерживаемым изображениям каталога;
+- создаёт `predictions.csv` и `index.html`;
+- при необходимости создаёт `annotations.csv`;
+- в режиме `db` дополнительно импортирует предсказания в SQLite.
 
-#### Аргументы
+Опции:
 
-- `<DOMAIN>` — домен/host, например `example.com` или `www.example.com`.
+`--model <PATH>` — путь к vision ONNX-модели.
 
-#### Опции CDX
+`--report <DIR>` — каталог для отчёта. На практике нужно держать его внутри анализируемой папки со скриншотами, обычно `<DIR>/report`.
 
-- `--match-type <STRING>` (default: `domain`)  
-   Как CDX матчить адреса. Обычно:
-  - `domain` — домен + поддомены
-  - `host` — только конкретный хост
-  - (другие значения зависят от CDX)
-- `--limit <N>`  
-   Ограничить число URL, которые вернёт CDX.
-- `--no-collapse`  
-   По умолчанию включён `collapse=urlkey` (склеивает дубли). Этот флаг **отключает** collapse.
-- `--no-filter-200`  
-   По умолчанию фильтр `statuscode:200` включён. Этот флаг **разрешает** не-200.
-- `--no-filter-html`  
-   По умолчанию фильтр `mimetype:text/html` включён. Этот флаг **разрешает** не-html (js/css/pdf/и т.д.).
-- `--timeout-s <SECONDS>` (default: `30`)  
-   Таймаут HTTP-клиента (в секундах).
-- `--retries <N>` (default: `6`)  
-   Сколько раз ретраить при 429/5xx/сетевых ошибках.
+`--serve`, `--host`, `--port` — параметры встроенного сервера.
 
-#### Fallback по годам (только если включить)
+`--storage <files|db>` — режим хранения результатов.
 
-- `--year-fallback`  
-   Если основной доменный запрос CDX “падает”, скрипт пробует собирать URL **по годам** и склеивать результаты.
-- `--year-from <YYYY>` (default: `2018`)
-- `--year-to <YYYY>` (default: `2025`)
+Замечание: даже в режиме `files` команда всё равно генерирует файловый отчёт, а в режиме `db` она делает то же самое плюс синхронизирует результаты с БД.
 
-#### Вывод
+## 3. `assets`
 
-- `--out <FILE>` — сохранить результат в файл (иначе печатает в stdout).
+Повторный анализ уже скачанной директории `assets/`.
+
+Синтаксис:
+
+```bash
+webhound assets <DIR> [--out <FILE>] [--storage <files|db>]
+```
+
+Примеры:
+
+```bash
+webhound assets ./example.com/assets --storage files
+webhound assets ./example.com/assets --storage files --out ./example.com/sensitive_info.post.jsonl
+webhound assets ./example.com/assets --storage db
+```
+
+Что делает команда:
+
+- рекурсивно проходит по каталогу;
+- отбирает текстоподобные файлы;
+- применяет правила поиска чувствительных данных;
+- сохраняет результат либо в JSONL, либо в SQLite.
+
+Поведение по умолчанию в файловом режиме:
+
+- если каталог называется ровно `assets`, то файл будет создан рядом, как `sensitive_info.post.jsonl`;
+- иначе файл создаётся внутри переданного каталога.
+
+В режиме `db` флаг `--out` практического смысла не имеет, потому что запись идёт в `webhound.db`.
+
+## 4. `text-analyze`
+
+Отдельный запуск текстовой модели.
+
+Синтаксис:
+
+```bash
+webhound text-analyze <INPUT_JSONL> --model-dir <DIR> [options]
+```
+
+Примеры:
+
+```bash
+webhound text-analyze ./example.com/sensitive_info.jsonl --storage files --model-dir /path/to/text-model
+webhound text-analyze ./example.com/sensitive_info.jsonl --storage files --model-dir /path/to/text-model --out ./example.com/sensitive_info.ml.jsonl
+webhound text-analyze ./example.com/sensitive_info.jsonl --storage db --model-dir /path/to/text-model
+```
+
+Опции:
+
+`--model-dir <DIR>` — каталог текстовой модели.
+
+`--out <FILE>` — выходной JSONL. В режиме `files`, если не задан, автоматически формируется путь вида `<name>.ml.jsonl`.
+
+`--text-use-path-prefix` — добавляет путь к файлу в модельный текст.
+
+`--text-max-length <N>` — максимальная длина последовательности.
+
+`--storage <files|db>` — режим хранения.
+
+Поведение важно понимать отдельно:
+
+- в режиме `files` команда читает входной JSONL и создаёт новый JSONL с ML-предсказаниями;
+- в режиме `db` команда работает с SQLite и создаёт новый run в БД.
+
+Текущая реализация standalone-вызова `text-analyze --storage db` ожидает файл `webhound.db` в текущей рабочей директории. Поэтому такую команду лучше запускать из каталога, где эта БД уже лежит.
+
+## 5. `cdx`
+
+Запрос URL из Wayback CDX без полного сканирования.
+
+Синтаксис:
+
+```bash
+webhound cdx <DOMAIN> [options] [--out <FILE>]
+```
+
+Примеры:
+
+```bash
+webhound cdx example.com
+webhound cdx example.com --match-type domain --limit 500 --out out.txt
+webhound cdx example.com --year-fallback --year-from 2015 --year-to 2025
+```
+
+Команда печатает результат в stdout или сохраняет его в файл, если передан `--out`.
+
+## 6. `serv`
+
+Поднятие HTTP-сервера для уже готового отчёта.
+
+Синтаксис:
+
+```bash
+webhound serv <REPORT_DIR> [--host <HOST>] [--port <PORT>]
+```
+
+Примеры:
+
+```bash
+webhound serv ./example.com/screenshots/report
+webhound serv ./example.com/screenshots/report --host 127.0.0.1 --port 8000
+```
+
+Что делает команда:
+
+- раздаёт `index.html` и связанные файлы отчёта;
+- использует `REPORT_DIR`, а также его родительскую и прародительскую директории как корни поиска файлов;
+- если рядом находит `webhound.db`, открывает API для чтения данных из SQLite;
+- при наличии `annotations.csv` синхронизирует аннотации с БД при старте.
