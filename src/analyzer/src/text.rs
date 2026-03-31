@@ -82,46 +82,6 @@ struct ExportMetadata {
     pub architectures: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct SensitiveSpan {
-    #[serde(default)]
-    pub start: usize,
-    #[serde(default)]
-    pub end: usize,
-    #[serde(default)]
-    pub label: String,
-    #[serde(default)]
-    pub rule_id: String,
-    #[serde(default)]
-    pub rule: String,
-    #[serde(default)]
-    pub rule_name: String,
-    #[serde(default)]
-    pub value: String,
-    #[serde(default)]
-    pub entropy_h: f64,
-    #[serde(default)]
-    pub entropy_total_bits: f64,
-    #[serde(default)]
-    pub len: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct SensitiveSample {
-    #[serde(default)]
-    pub schema: Option<u8>,
-    #[serde(default)]
-    pub kind: Option<String>,
-    #[serde(default)]
-    pub path: String,
-    #[serde(default)]
-    pub line: Option<u32>,
-    #[serde(default)]
-    pub text: String,
-    #[serde(default)]
-    pub spans: Vec<SensitiveSpan>,
-}
-
 pub struct TextClassifier {
     _env: Arc<Environment>,
     session: Session,
@@ -137,7 +97,10 @@ impl TextClassifier {
             bail!("ONNX model not found: {}", cfg.model_path().display());
         }
         if !cfg.tokenizer_path().is_file() {
-            bail!("tokenizer.json not found: {}", cfg.tokenizer_path().display());
+            bail!(
+                "tokenizer.json not found: {}",
+                cfg.tokenizer_path().display()
+            );
         }
         if !cfg.metadata_path().is_file() {
             bail!("metadata not found: {}", cfg.metadata_path().display());
@@ -188,77 +151,77 @@ impl TextClassifier {
     }
 
     pub fn predict_text(&self, text: &str, path: Option<&str>) -> Result<TextPrediction> {
-    let model_text = build_model_text(text, path, self.use_path_prefix);
+        let model_text = build_model_text(text, path, self.use_path_prefix);
 
-    let enc = self
-        .tokenizer
-        .encode(model_text.clone(), true)
-        .map_err(|e| anyhow!("tokenizer.encode: {e}"))?;
+        let enc = self
+            .tokenizer
+            .encode(model_text.clone(), true)
+            .map_err(|e| anyhow!("tokenizer.encode: {e}"))?;
 
-    let ids: Vec<i64> = enc.get_ids().iter().map(|&v| v as i64).collect();
-    let mask: Vec<i64> = enc.get_attention_mask().iter().map(|&v| v as i64).collect();
+        let ids: Vec<i64> = enc.get_ids().iter().map(|&v| v as i64).collect();
+        let mask: Vec<i64> = enc.get_attention_mask().iter().map(|&v| v as i64).collect();
 
-    if ids.is_empty() || mask.is_empty() {
-        bail!("tokenizer produced empty input");
+        if ids.is_empty() || mask.is_empty() {
+            bail!("tokenizer produced empty input");
+        }
+        if ids.len() != mask.len() {
+            bail!(
+                "tokenizer mismatch: input_ids={} attention_mask={}",
+                ids.len(),
+                mask.len()
+            );
+        }
+
+        let seq_len = ids.len();
+
+        let ids_arr = Array2::from_shape_vec((1, seq_len), ids)
+            .context("build input_ids ndarray")?
+            .into_dyn();
+
+        let mask_arr = Array2::from_shape_vec((1, seq_len), mask)
+            .context("build attention_mask ndarray")?
+            .into_dyn();
+
+        let ids_cow: CowArray<'_, i64, IxDyn> = CowArray::from(ids_arr.view());
+        let mask_cow: CowArray<'_, i64, IxDyn> = CowArray::from(mask_arr.view());
+
+        let ids_tensor = Value::from_array(self.session.allocator(), &ids_cow)
+            .map_err(|e| anyhow!("Value::from_array(input_ids): {e}"))?;
+        let mask_tensor = Value::from_array(self.session.allocator(), &mask_cow)
+            .map_err(|e| anyhow!("Value::from_array(attention_mask): {e}"))?;
+
+        let outputs = self
+            .session
+            .run(vec![ids_tensor, mask_tensor])
+            .map_err(|e| anyhow!("session.run: {e}"))?;
+
+        let out = outputs
+            .get(0)
+            .ok_or_else(|| anyhow!("ONNX returned no outputs"))?
+            .try_extract::<f32>()
+            .map_err(|e| anyhow!("extract logits: {e}"))?;
+
+        let out_view = out.view();
+        let logits2: ArrayView2<'_, f32> = out_view
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .context("bad logits rank, expected [batch, num_labels]")?;
+
+        if logits2.nrows() != 1 {
+            bail!("expected batch=1, got {}", logits2.nrows());
+        }
+
+        let logits = logits2.row(0).to_vec();
+        if logits.len() != self.labels.len() {
+            bail!(
+                "label mismatch: model produced {} logits, metadata has {} labels",
+                logits.len(),
+                self.labels.len()
+            );
+        }
+
+        Ok(prediction_from_logits(&self.labels, logits, model_text))
     }
-    if ids.len() != mask.len() {
-        bail!(
-            "tokenizer mismatch: input_ids={} attention_mask={}",
-            ids.len(),
-            mask.len()
-        );
-    }
-
-    let seq_len = ids.len();
-
-    let ids_arr = Array2::from_shape_vec((1, seq_len), ids)
-        .context("build input_ids ndarray")?
-        .into_dyn();
-
-    let mask_arr = Array2::from_shape_vec((1, seq_len), mask)
-        .context("build attention_mask ndarray")?
-        .into_dyn();
-
-    let ids_cow: CowArray<'_, i64, IxDyn> = CowArray::from(ids_arr.view());
-    let mask_cow: CowArray<'_, i64, IxDyn> = CowArray::from(mask_arr.view());
-
-    let ids_tensor = Value::from_array(self.session.allocator(), &ids_cow)
-        .map_err(|e| anyhow!("Value::from_array(input_ids): {e}"))?;
-    let mask_tensor = Value::from_array(self.session.allocator(), &mask_cow)
-        .map_err(|e| anyhow!("Value::from_array(attention_mask): {e}"))?;
-
-    let outputs = self
-        .session
-        .run(vec![ids_tensor, mask_tensor])
-        .map_err(|e| anyhow!("session.run: {e}"))?;
-
-    let out = outputs
-        .get(0)
-        .ok_or_else(|| anyhow!("ONNX returned no outputs"))?
-        .try_extract::<f32>()
-        .map_err(|e| anyhow!("extract logits: {e}"))?;
-
-    let out_view = out.view();
-    let logits2: ArrayView2<'_, f32> = out_view
-        .clone()
-        .into_dimensionality::<Ix2>()
-        .context("bad logits rank, expected [batch, num_labels]")?;
-
-    if logits2.nrows() != 1 {
-        bail!("expected batch=1, got {}", logits2.nrows());
-    }
-
-    let logits = logits2.row(0).to_vec();
-    if logits.len() != self.labels.len() {
-        bail!(
-            "label mismatch: model produced {} logits, metadata has {} labels",
-            logits.len(),
-            self.labels.len()
-        );
-    }
-
-    Ok(prediction_from_logits(&self.labels, logits, model_text))
-}
 
     pub fn annotate_jsonl(
         &self,
@@ -268,11 +231,10 @@ impl TextClassifier {
         let input_jsonl = input_jsonl.as_ref();
         let output_jsonl = output_jsonl.as_ref();
 
-        let input = File::open(input_jsonl)
-            .with_context(|| format!("open {}", input_jsonl.display()))?;
+        let input =
+            File::open(input_jsonl).with_context(|| format!("open {}", input_jsonl.display()))?;
         if let Some(parent) = output_jsonl.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("mkdir -p {}", parent.display()))?;
+            fs::create_dir_all(parent).with_context(|| format!("mkdir -p {}", parent.display()))?;
         }
         let output = File::create(output_jsonl)
             .with_context(|| format!("create {}", output_jsonl.display()))?;
@@ -291,41 +253,43 @@ impl TextClassifier {
                 continue;
             }
 
-            let mut obj: JsonValue = serde_json::from_str(trimmed).with_context(|| {
-                format!("parse JSON at {}:{}", input_jsonl.display(), line_no)
-            })?;
+            let mut obj: JsonValue = serde_json::from_str(trimmed)
+                .with_context(|| format!("parse JSON at {}:{}", input_jsonl.display(), line_no))?;
 
             let path = obj
-    .get("path")
-    .and_then(|v| v.as_str())
-    .unwrap_or("")
-    .to_string();
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
 
-let text = obj
-    .get("text")
-    .and_then(|v| v.as_str())
-    .unwrap_or("")
-    .to_string();
+            let text = obj
+                .get("text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
 
-if text.trim().is_empty() {
-    continue;
-}
+            if text.trim().is_empty() {
+                continue;
+            }
 
-let pred = self.predict_text(&text, Some(&path)).with_context(|| {
-    format!(
-        "predict sample at {}:{} ({})",
-        input_jsonl.display(),
-        line_no,
-        path
-    )
-})?;
+            let pred = self.predict_text(&text, Some(&path)).with_context(|| {
+                format!(
+                    "predict sample at {}:{} ({})",
+                    input_jsonl.display(),
+                    line_no,
+                    path
+                )
+            })?;
 
             attach_prediction(&mut obj, &pred)?;
             serde_json::to_writer(&mut writer, &obj)?;
             writer.write_all(b"\n")?;
 
             stats.total += 1;
-            *stats.by_label.entry(pred.pred_label.clone()).or_insert(0usize) += 1;
+            *stats
+                .by_label
+                .entry(pred.pred_label.clone())
+                .or_insert(0usize) += 1;
         }
 
         writer.flush()?;
@@ -441,10 +405,16 @@ fn attach_prediction(obj: &mut JsonValue, pred: &TextPrediction) -> Result<()> {
     }
 
     map.insert("ml_pred_id".into(), JsonValue::from(pred.pred_id as u64));
-    map.insert("ml_pred_label".into(), JsonValue::from(pred.pred_label.clone()));
+    map.insert(
+        "ml_pred_label".into(),
+        JsonValue::from(pred.pred_label.clone()),
+    );
     map.insert("ml_pred_score".into(), JsonValue::from(pred.pred_score));
     map.insert("ml_pred_probs".into(), JsonValue::Object(probs_map));
-    map.insert("ml_model_text".into(), JsonValue::from(pred.model_text.clone()));
+    map.insert(
+        "ml_model_text".into(),
+        JsonValue::from(pred.model_text.clone()),
+    );
 
     Ok(())
 }

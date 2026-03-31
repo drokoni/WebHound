@@ -1,2 +1,2 @@
-pub mod vision;
 pub mod text;
+pub mod vision;

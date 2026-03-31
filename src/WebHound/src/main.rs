@@ -2,10 +2,10 @@ use analyzer::text::{TextAnalyzerConfig, TextClassifier};
 use analyzer::vision::*;
 use anyhow::{anyhow, Result};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
-use scanner::run_scan;
+use scanner::{run_scan, StorageMode};
 use std::{fs, path::PathBuf, time::Duration};
 use storage::{
-    NewAnalysisFinding, NewEvent, NewScreenshot, NewScanRun, NewVisionPrediction, SqliteStorage,
+    NewAnalysisFinding, NewEvent, NewScanRun, NewScreenshot, NewVisionPrediction, SqliteStorage,
 };
 
 #[derive(Parser, Debug)]
@@ -34,6 +34,28 @@ impl MatchType {
             MatchType::Host => "host",
         }
     }
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum StorageBackend {
+    Files,
+    Db,
+}
+
+impl From<StorageBackend> for StorageMode {
+    fn from(value: StorageBackend) -> Self {
+        match value {
+            StorageBackend::Files => StorageMode::Files,
+            StorageBackend::Db => StorageMode::Db,
+        }
+    }
+}
+
+#[derive(Args, Debug, Clone)]
+#[command(next_help_heading = "Storage options")]
+struct StorageArgs {
+    #[arg(long, value_enum, default_value_t = StorageBackend::Files)]
+    storage: StorageBackend,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -123,12 +145,10 @@ struct TextAnalyzeArgs {
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
-    #[command(
-        after_help = r#"Examples:
+    #[command(after_help = r#"Examples:
   webhound serv ./example.com/screenshots/report
   webhound serv ./report --host 127.0.0.1 --port 8000
-"#
-    )]
+"#)]
     Serv {
         #[arg(value_name = "REPORT_DIR")]
         dir: PathBuf,
@@ -140,13 +160,11 @@ enum Cmd {
         host: String,
     },
 
-    #[command(
-        after_help = r#"Examples:
+    #[command(after_help = r#"Examples:
   webhound cdx example.com
   webhound cdx example.com --match-type domain --limit 500 --out out.txt
   webhound cdx example.com --year-fallback --year-from 2015 --year-to 2025
-"#
-    )]
+"#)]
     Cdx {
         #[arg(value_name = "DOMAIN")]
         domain: String,
@@ -158,16 +176,14 @@ enum Cmd {
         out: Option<PathBuf>,
     },
 
-    #[command(
-        after_help = r#"Examples:
+    #[command(after_help = r#"Examples:
   source ./.env
   WebHound scan example.com
   WebHound scan example.com --limit 500
   WebHound scan example.com --analyze --model "$WEBHOUND_VISION_MODEL" --serve
   WebHound scan example.com --text-analyze --text-model-dir "$WEBHOUND_TEXT_MODEL_DIR"
   WebHound scan example.com --analyze --model "$WEBHOUND_VISION_MODEL" --text-analyze --text-model-dir "$WEBHOUND_TEXT_MODEL_DIR" --serve
-"#
-    )]
+"#)]
     Scan {
         #[arg(value_name = "TARGET")]
         target: String,
@@ -183,16 +199,17 @@ enum Cmd {
 
         #[command(flatten)]
         serve: ServeArgs,
+
+        #[command(flatten)]
+        storage: StorageArgs,
     },
 
-    #[command(
-        after_help = r#"Examples:
+    #[command(after_help = r#"Examples:
   source ./.env
   WebHound images ./example.com/screenshots
   WebHound images ./example.com/screenshots --model "$WEBHOUND_VISION_MODEL" --serve
   WebHound images ./screenshots --model "$WEBHOUND_VISION_MODEL" --report ./screenshots/report
-"#
-    )]
+"#)]
     Images {
         #[arg(value_name = "DIR")]
         dir: PathBuf,
@@ -211,32 +228,34 @@ enum Cmd {
 
         #[command(flatten)]
         serve: ServeArgs,
+
+        #[command(flatten)]
+        storage: StorageArgs,
     },
 
-    #[command(
-        after_help = r#"Examples:
+    #[command(after_help = r#"Examples:
   source ./.env
   WebHound assets ./example.com/assets
   WebHound assets ./example.com/assets --out ./example.com/sensitive_info.post.jsonl
   WebHound text-analyze ./example.com/sensitive_info.post.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR" --out ./example.com/sensitive_info.post.ml.jsonl
-"#
-    )]
+"#)]
     Assets {
         #[arg(value_name = "DIR")]
         dir: PathBuf,
 
         #[arg(long, value_name = "FILE")]
         out: Option<PathBuf>,
+
+        #[command(flatten)]
+        storage: StorageArgs,
     },
 
-    #[command(
-        after_help = r#"Examples:
+    #[command(after_help = r#"Examples:
   WebHound text-analyze ./example.com/sensitive_info.jsonl
   WebHound text-analyze ./example.com/sensitive_info.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR"
   WebHound text-analyze ./example.com/sensitive_info.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR" --out ./example.com/sensitive_info.ml.jsonl
   WebHound text-analyze ./example.com/sensitive_info.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR" --text-use-path-prefix
-"#
-    )]
+"#)]
     TextAnalyze {
         #[arg(value_name = "INPUT_JSONL")]
         input: PathBuf,
@@ -252,6 +271,9 @@ enum Cmd {
 
         #[arg(long, value_name = "N", default_value_t = 192)]
         text_max_length: usize,
+
+        #[command(flatten)]
+        storage: StorageArgs,
     },
 }
 
@@ -333,7 +355,8 @@ fn import_vision_csv_to_db(
     for rec in rdr.records() {
         let rec = rec?;
         let local_path_raw = rec.get(file_idx).unwrap_or("").to_string();
-        let local_path = if let Ok(canon) = std::path::PathBuf::from(&local_path_raw).canonicalize() {
+        let local_path = if let Ok(canon) = std::path::PathBuf::from(&local_path_raw).canonicalize()
+        {
             canon.to_string_lossy().to_string()
         } else {
             local_path_raw
@@ -481,6 +504,25 @@ fn annotate_text_from_db(
     Ok(())
 }
 
+fn default_text_output_path(input_jsonl: &PathBuf) -> PathBuf {
+    let parent = input_jsonl
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let stem = input_jsonl
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("sensitive_info");
+
+    let ext = input_jsonl
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("jsonl");
+
+    parent.join(format!("{stem}.ml.{ext}"))
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Cli::parse();
@@ -530,7 +572,10 @@ async fn main() -> Result<()> {
             report,
             text,
             serve,
+            storage,
         } => {
+            let storage_mode: StorageMode = storage.storage.into();
+
             scanner::net::set_cdx_defaults(scanner::net::CdxDomainOpts {
                 match_type: cdx.match_type.as_str().to_string(),
                 collapse_urlkey: !cdx.no_collapse,
@@ -544,7 +589,7 @@ async fn main() -> Result<()> {
                 enable_year_fallback: cdx.year_fallback,
             });
 
-            let paths = run_scan(&target)
+            let paths = run_scan(&target, storage_mode)
                 .await
                 .map_err(|e| anyhow!(e.to_string()))?;
 
@@ -556,36 +601,60 @@ async fn main() -> Result<()> {
                     .clone()
                     .ok_or_else(|| anyhow!("--text-model-dir обязателен при --text-analyze"))?;
 
-                let sqlite = SqliteStorage::open(paths.base.join("webhound.db"))?;
-                let text_run_id = sqlite.create_scan_run(NewScanRun {
-                    target: paths.base.display().to_string(),
-                    mode: "text_analyze".to_string(),
-                    status: "running".to_string(),
-                    config_json: None,
-                })?;
+                match storage_mode {
+                    StorageMode::Db => {
+                        let sqlite = SqliteStorage::open(paths.base.join("webhound.db"))?;
+                        let text_run_id = sqlite.create_scan_run(NewScanRun {
+                            target: paths.base.display().to_string(),
+                            mode: "text_analyze".to_string(),
+                            status: "running".to_string(),
+                            config_json: None,
+                        })?;
 
-                let result = annotate_text_from_db(
-                    &sqlite,
-                    text_run_id,
-                    &model_dir,
-                    text.text_use_path_prefix,
-                    text.text_max_length,
-                );
+                        let result = annotate_text_from_db(
+                            &sqlite,
+                            text_run_id,
+                            &model_dir,
+                            text.text_use_path_prefix,
+                            text.text_max_length,
+                        );
 
-                match result {
-                    Ok(()) => {
-                        let _ = sqlite.finish_scan_run(text_run_id, "success");
+                        match result {
+                            Ok(()) => {
+                                let _ = sqlite.finish_scan_run(text_run_id, "success");
+                            }
+                            Err(e) => {
+                                let _ = sqlite.insert_event(&NewEvent {
+                                    scan_run_id: Some(text_run_id),
+                                    level: "error".to_string(),
+                                    component: "text_ml".to_string(),
+                                    message: "text db annotation failed".to_string(),
+                                    details_json: Some(
+                                        serde_json::json!({ "error": e.to_string() }).to_string(),
+                                    ),
+                                });
+                                let _ = sqlite.finish_scan_run(text_run_id, "failed");
+                                return Err(e);
+                            }
+                        }
                     }
-                    Err(e) => {
-                        let _ = sqlite.insert_event(&NewEvent {
-                            scan_run_id: Some(text_run_id),
-                            level: "error".to_string(),
-                            component: "text_ml".to_string(),
-                            message: "text db annotation failed".to_string(),
-                            details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
-                        });
-                        let _ = sqlite.finish_scan_run(text_run_id, "failed");
-                        return Err(e);
+                    StorageMode::Files => {
+                        let input_jsonl = text
+                            .text_input
+                            .clone()
+                            .unwrap_or_else(|| paths.sensitive_info_txt.clone());
+                        let output_jsonl = text
+                            .text_output
+                            .clone()
+                            .unwrap_or_else(|| default_text_output_path(&input_jsonl));
+
+                        annotate_sensitive_info(
+                            &model_dir,
+                            &input_jsonl,
+                            &output_jsonl,
+                            text.text_use_path_prefix,
+                            text.text_max_length,
+                        )?;
                     }
                 }
             }
@@ -614,49 +683,71 @@ async fn main() -> Result<()> {
             report,
             batch: _,
             serve,
+            storage,
         } => {
-            let (sqlite, scan_run_id) = scanner::run_images_analysis(&dir).await?;
-
+            let storage_mode: StorageMode = storage.storage.into();
             let out_dir = report.clone().unwrap_or_else(|| dir.join("report"));
-            let result = analyze_and_maybe_serve(
-                &dir,
-                &out_dir,
-                &model,
-                serve.serve,
-                &serve.host,
-                serve.port,
-            );
 
-            match result {
-                Ok(()) => {
-                    if let Err(e) = import_vision_csv_to_db(&sqlite, scan_run_id, &out_dir) {
-                        let _ = sqlite.insert_event(&NewEvent {
-                            scan_run_id: Some(scan_run_id),
-                            level: "error".to_string(),
-                            component: "images".to_string(),
-                            message: "import predictions.csv to sqlite failed".to_string(),
-                            details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
-                        });
-                    }
-
-                    let _ = sqlite.finish_scan_run(scan_run_id, "success");
+            match storage_mode {
+                StorageMode::Files => {
+                    analyze_and_maybe_serve(
+                        &dir,
+                        &out_dir,
+                        &model,
+                        serve.serve,
+                        &serve.host,
+                        serve.port,
+                    )?;
                 }
-                Err(e) => {
-                    let _ = sqlite.insert_event(&NewEvent {
-                        scan_run_id: Some(scan_run_id),
-                        level: "error".to_string(),
-                        component: "images".to_string(),
-                        message: "images analysis failed".to_string(),
-                        details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
-                    });
-                    let _ = sqlite.finish_scan_run(scan_run_id, "failed");
-                    return Err(e);
+                StorageMode::Db => {
+                    let (sqlite, scan_run_id) = scanner::run_images_analysis(&dir).await?;
+                    let result = analyze_and_maybe_serve(
+                        &dir,
+                        &out_dir,
+                        &model,
+                        serve.serve,
+                        &serve.host,
+                        serve.port,
+                    );
+
+                    match result {
+                        Ok(()) => {
+                            if let Err(e) = import_vision_csv_to_db(&sqlite, scan_run_id, &out_dir)
+                            {
+                                let _ = sqlite.insert_event(&NewEvent {
+                                    scan_run_id: Some(scan_run_id),
+                                    level: "error".to_string(),
+                                    component: "images".to_string(),
+                                    message: "import predictions.csv to sqlite failed".to_string(),
+                                    details_json: Some(
+                                        serde_json::json!({ "error": e.to_string() }).to_string(),
+                                    ),
+                                });
+                            }
+
+                            let _ = sqlite.finish_scan_run(scan_run_id, "success");
+                        }
+                        Err(e) => {
+                            let _ = sqlite.insert_event(&NewEvent {
+                                scan_run_id: Some(scan_run_id),
+                                level: "error".to_string(),
+                                component: "images".to_string(),
+                                message: "images analysis failed".to_string(),
+                                details_json: Some(
+                                    serde_json::json!({ "error": e.to_string() }).to_string(),
+                                ),
+                            });
+                            let _ = sqlite.finish_scan_run(scan_run_id, "failed");
+                            return Err(e);
+                        }
+                    }
                 }
             }
         }
 
-        Cmd::Assets { dir, out: _ } => {
-            scanner::run_assets_analysis(&dir).await?;
+        Cmd::Assets { dir, out, storage } => {
+            let storage_mode: StorageMode = storage.storage.into();
+            scanner::run_assets_analysis(&dir, storage_mode, out.clone()).await?;
             println!("Assets postfilter done.");
             println!("Assets dir: {}", dir.display());
         }
@@ -667,48 +758,67 @@ async fn main() -> Result<()> {
             out,
             text_use_path_prefix,
             text_max_length,
+            storage,
         } => {
-            let sqlite = SqliteStorage::open("webhound.db")?;
+            let storage_mode: StorageMode = storage.storage.into();
 
-            let text_run_id = sqlite.create_scan_run(NewScanRun {
-                target: ".".to_string(),
-                mode: "text_analyze".to_string(),
-                status: "running".to_string(),
-                config_json: None,
-            })?;
-
-            let result = annotate_text_from_db(
-                &sqlite,
-                text_run_id,
-                &model_dir,
-                text_use_path_prefix,
-                text_max_length,
-            );
-
-            match result {
-                Ok(()) => {
-                    let _ = sqlite.finish_scan_run(text_run_id, "success");
-
-                    if let Some(output_jsonl) = out {
-                        annotate_sensitive_info(
-                            &model_dir,
-                            &input,
-                            &output_jsonl,
-                            text_use_path_prefix,
-                            text_max_length,
-                        )?;
-                    }
+            match storage_mode {
+                StorageMode::Files => {
+                    let output_jsonl = out.unwrap_or_else(|| default_text_output_path(&input));
+                    annotate_sensitive_info(
+                        &model_dir,
+                        &input,
+                        &output_jsonl,
+                        text_use_path_prefix,
+                        text_max_length,
+                    )?;
                 }
-                Err(e) => {
-                    let _ = sqlite.insert_event(&NewEvent {
-                        scan_run_id: Some(text_run_id),
-                        level: "error".to_string(),
-                        component: "text_ml".to_string(),
-                        message: "text db annotation failed".to_string(),
-                        details_json: Some(serde_json::json!({ "error": e.to_string() }).to_string()),
-                    });
-                    let _ = sqlite.finish_scan_run(text_run_id, "failed");
-                    return Err(e);
+                StorageMode::Db => {
+                    let sqlite = SqliteStorage::open("webhound.db")?;
+
+                    let text_run_id = sqlite.create_scan_run(NewScanRun {
+                        target: ".".to_string(),
+                        mode: "text_analyze".to_string(),
+                        status: "running".to_string(),
+                        config_json: None,
+                    })?;
+
+                    let result = annotate_text_from_db(
+                        &sqlite,
+                        text_run_id,
+                        &model_dir,
+                        text_use_path_prefix,
+                        text_max_length,
+                    );
+
+                    match result {
+                        Ok(()) => {
+                            let _ = sqlite.finish_scan_run(text_run_id, "success");
+
+                            if let Some(output_jsonl) = out {
+                                annotate_sensitive_info(
+                                    &model_dir,
+                                    &input,
+                                    &output_jsonl,
+                                    text_use_path_prefix,
+                                    text_max_length,
+                                )?;
+                            }
+                        }
+                        Err(e) => {
+                            let _ = sqlite.insert_event(&NewEvent {
+                                scan_run_id: Some(text_run_id),
+                                level: "error".to_string(),
+                                component: "text_ml".to_string(),
+                                message: "text db annotation failed".to_string(),
+                                details_json: Some(
+                                    serde_json::json!({ "error": e.to_string() }).to_string(),
+                                ),
+                            });
+                            let _ = sqlite.finish_scan_run(text_run_id, "failed");
+                            return Err(e);
+                        }
+                    }
                 }
             }
         }

@@ -1,5 +1,5 @@
 [package]
-name = "WebHound"
+name = "webhound"
 version = "0.1.0"
 edition = "2021"
 

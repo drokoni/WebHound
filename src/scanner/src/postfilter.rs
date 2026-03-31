@@ -1,15 +1,12 @@
-use anyhow::Result as AnyResult;
 use crate::sensitive_jsonl::{write_analysis_samples_from_text, SensitiveSink};
+use anyhow::Result as AnyResult;
 use std::{
     fs::File,
     io::Read,
     path::{Path, PathBuf},
 };
 
-pub async fn postfilter_assets_dir(
-    assets_dir: &Path,
-    sink: &SensitiveSink,
-) -> AnyResult<()> {
+pub async fn postfilter_assets_dir(assets_dir: &Path, sink: &SensitiveSink) -> AnyResult<()> {
     let files = collect_files_recursive(assets_dir)?;
 
     for p in files {

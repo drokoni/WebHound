@@ -1,6 +1,5 @@
 use crate::models::{
-    NewAnalysisFinding, NewEvent, NewOutUrl, NewRawFinding, NewScanRun, NewScreenshot,
-    NewSubdomain,
+    NewAnalysisFinding, NewEvent, NewOutUrl, NewRawFinding, NewScanRun, NewScreenshot, NewSubdomain,
 };
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -206,7 +205,8 @@ CREATE INDEX IF NOT EXISTS idx_screenshot_annotations_local_path ON screenshot_a
 "#;
 
         let conn = self.conn.lock().expect("sqlite mutex poisoned");
-        conn.execute_batch(sql).context("failed to run sqlite migrations")?;
+        conn.execute_batch(sql)
+            .context("failed to run sqlite migrations")?;
         Ok(())
     }
 
@@ -416,7 +416,15 @@ CREATE INDEX IF NOT EXISTS idx_screenshot_annotations_local_path ON screenshot_a
                 updated_at = ?6
             WHERE local_path = ?7
             "#,
-            params![model_name, model_version, ml_label, ml_score, ml_scores_json, now, local_path],
+            params![
+                model_name,
+                model_version,
+                ml_label,
+                ml_score,
+                ml_scores_json,
+                now,
+                local_path
+            ],
         )?;
         Ok(())
     }
@@ -431,21 +439,21 @@ CREATE INDEX IF NOT EXISTS idx_screenshot_annotations_local_path ON screenshot_a
         Ok(())
     }
     pub fn upsert_screenshot_ml_only(
-    &self,
-    scan_run_id: i64,
-    page_url: &str,
-    local_path: &str,
-    model_name: &str,
-    model_version: Option<&str>,
-    ml_label: &str,
-    ml_score: f64,
-    ml_scores_json: &str,
-) -> Result<()> {
-    let now = Utc::now().to_rfc3339();
-    let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        &self,
+        scan_run_id: i64,
+        page_url: &str,
+        local_path: &str,
+        model_name: &str,
+        model_version: Option<&str>,
+        ml_label: &str,
+        ml_score: f64,
+        ml_scores_json: &str,
+    ) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().expect("sqlite mutex poisoned");
 
-    conn.execute(
-        r#"
+        conn.execute(
+            r#"
         INSERT INTO screenshots (
             scan_run_id,
             page_url,
@@ -459,25 +467,28 @@ CREATE INDEX IF NOT EXISTS idx_screenshot_annotations_local_path ON screenshot_a
             updated_at
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
         "#,
-        params![
-            scan_run_id,
-            page_url,
-            local_path,
-            model_name,
-            model_version,
-            ml_label,
-            ml_score,
-            ml_scores_json,
-            now
-        ],
-    )?;
+            params![
+                scan_run_id,
+                page_url,
+                local_path,
+                model_name,
+                model_version,
+                ml_label,
+                ml_score,
+                ml_scores_json,
+                now
+            ],
+        )?;
 
-    Ok(())
-}
-pub fn list_raw_findings_for_run(&self, scan_run_id: i64) -> Result<Vec<crate::models::RawFindingRow>> {
-    let conn = self.conn.lock().expect("sqlite mutex poisoned");
-    let mut stmt = conn.prepare(
-        r#"
+        Ok(())
+    }
+    pub fn list_raw_findings_for_run(
+        &self,
+        scan_run_id: i64,
+    ) -> Result<Vec<crate::models::RawFindingRow>> {
+        let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            r#"
         SELECT
             id, scan_run_id, source_path, source_kind, line, sample_kind,
             finding_type, rule_id, rule_name, match_text, context_text,
@@ -486,88 +497,90 @@ pub fn list_raw_findings_for_run(&self, scan_run_id: i64) -> Result<Vec<crate::m
         WHERE scan_run_id = ?1
         ORDER BY id ASC
         "#,
-    )?;
+        )?;
 
-    let rows = stmt.query_map(params![scan_run_id], |r| {
-        Ok(crate::models::RawFindingRow {
-            id: r.get(0)?,
-            scan_run_id: r.get(1)?,
-            source_path: r.get(2)?,
-            source_kind: r.get(3)?,
-            line: r.get::<_, Option<i64>>(4)?.map(|v| v as u32),
-            sample_kind: r.get(5)?,
-            finding_type: r.get(6)?,
-            rule_id: r.get(7)?,
-            rule_name: r.get(8)?,
-            match_text: r.get(9)?,
-            context_text: r.get(10)?,
-            start_offset: r.get::<_, i64>(11)? as usize,
-            end_offset: r.get::<_, i64>(12)? as usize,
-            entropy_h: r.get(13)?,
-            entropy_total_bits: r.get(14)?,
-            value_len: r.get::<_, i64>(15)? as usize,
-            source_text_hash: r.get(16)?,
-        })
-    })?;
+        let rows = stmt.query_map(params![scan_run_id], |r| {
+            Ok(crate::models::RawFindingRow {
+                id: r.get(0)?,
+                scan_run_id: r.get(1)?,
+                source_path: r.get(2)?,
+                source_kind: r.get(3)?,
+                line: r.get::<_, Option<i64>>(4)?.map(|v| v as u32),
+                sample_kind: r.get(5)?,
+                finding_type: r.get(6)?,
+                rule_id: r.get(7)?,
+                rule_name: r.get(8)?,
+                match_text: r.get(9)?,
+                context_text: r.get(10)?,
+                start_offset: r.get::<_, i64>(11)? as usize,
+                end_offset: r.get::<_, i64>(12)? as usize,
+                entropy_h: r.get(13)?,
+                entropy_total_bits: r.get(14)?,
+                value_len: r.get::<_, i64>(15)? as usize,
+                source_text_hash: r.get(16)?,
+            })
+        })?;
 
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row?);
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
     }
-    Ok(out)
-}
-pub fn find_screenshot_by_local_path(&self, local_path: &str) -> Result<Option<crate::models::ScreenshotRow>> {
-    let conn = self.conn.lock().expect("sqlite mutex poisoned");
-    let local_path = normalize_path_str(local_path);
-    let mut stmt = conn.prepare(
-        r#"
+    pub fn find_screenshot_by_local_path(
+        &self,
+        local_path: &str,
+    ) -> Result<Option<crate::models::ScreenshotRow>> {
+        let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        let local_path = normalize_path_str(local_path);
+        let mut stmt = conn.prepare(
+            r#"
         SELECT id, scan_run_id, page_url, local_path
         FROM screenshots
         WHERE local_path = ?1
         ORDER BY id DESC
         LIMIT 1
         "#,
-        
-    )?;
+        )?;
 
-    let mut rows = stmt.query(params![local_path])?;
-    if let Some(r) = rows.next()? {
-        Ok(Some(crate::models::ScreenshotRow {
-            id: r.get(0)?,
-            scan_run_id: r.get(1)?,
-            page_url: r.get(2)?,
-            local_path: r.get(3)?,
-        }))
-    } else {
-        Ok(None)
+        let mut rows = stmt.query(params![local_path])?;
+        if let Some(r) = rows.next()? {
+            Ok(Some(crate::models::ScreenshotRow {
+                id: r.get(0)?,
+                scan_run_id: r.get(1)?,
+                page_url: r.get(2)?,
+                local_path: r.get(3)?,
+            }))
+        } else {
+            Ok(None)
+        }
     }
-}
-pub fn latest_scan_run_id(&self) -> Result<Option<i64>> {
-    let conn = self.conn.lock().expect("sqlite mutex poisoned");
-    let mut stmt = conn.prepare(
-        r#"
+    pub fn latest_scan_run_id(&self) -> Result<Option<i64>> {
+        let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            r#"
         SELECT id
         FROM scan_runs
         WHERE mode = 'scan'
         ORDER BY id DESC
         LIMIT 1
         "#,
-    )?;
+        )?;
 
-    let mut rows = stmt.query([])?;
-    if let Some(r) = rows.next()? {
-        Ok(Some(r.get(0)?))
-    } else {
-        Ok(None)
+        let mut rows = stmt.query([])?;
+        if let Some(r) = rows.next()? {
+            Ok(Some(r.get(0)?))
+        } else {
+            Ok(None)
+        }
     }
-}
-pub fn insert_vision_prediction(&self, row: &crate::models::NewVisionPrediction) -> Result<()> {
-    let now = Utc::now().to_rfc3339();
-    let conn = self.conn.lock().expect("sqlite mutex poisoned");
-    let local_path = normalize_path_str(&row.local_path);
+    pub fn insert_vision_prediction(&self, row: &crate::models::NewVisionPrediction) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        let local_path = normalize_path_str(&row.local_path);
 
-    conn.execute(
-        r#"
+        conn.execute(
+            r#"
         INSERT INTO vision_predictions (
             scan_run_id,
             screenshot_id,
@@ -580,31 +593,31 @@ pub fn insert_vision_prediction(&self, row: &crate::models::NewVisionPrediction)
             created_at
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
         "#,
-        params![
-            row.scan_run_id,
-            row.screenshot_id,
-            local_path,
-            row.model_name,
-            row.model_version,
-            row.top_label,
-            row.top_prob,
-            row.probs_json,
-            now
-        ],
-    )?;
-    Ok(())
-}
+            params![
+                row.scan_run_id,
+                row.screenshot_id,
+                local_path,
+                row.model_name,
+                row.model_version,
+                row.top_label,
+                row.top_prob,
+                row.probs_json,
+                now
+            ],
+        )?;
+        Ok(())
+    }
 
-pub fn insert_screenshot_annotation(
-    &self,
-    row: &crate::models::NewScreenshotAnnotation,
-) -> Result<()> {
-    let now = Utc::now().to_rfc3339();
-    let conn = self.conn.lock().expect("sqlite mutex poisoned");
-    let local_path = normalize_path_str(&row.local_path);
+    pub fn insert_screenshot_annotation(
+        &self,
+        row: &crate::models::NewScreenshotAnnotation,
+    ) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        let local_path = normalize_path_str(&row.local_path);
 
-    conn.execute(
-        r#"
+        conn.execute(
+            r#"
         INSERT INTO screenshot_annotations (
             screenshot_id,
             local_path,
@@ -614,71 +627,89 @@ pub fn insert_screenshot_annotation(
             created_at
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
         "#,
-        params![
-            row.screenshot_id,
-            local_path,
-            row.user_label,
-            row.analyst_note,
-            row.updated_by,
-            now
-        ],
-    )?;
-    Ok(())
-}
+            params![
+                row.screenshot_id,
+                local_path,
+                row.user_label,
+                row.analyst_note,
+                row.updated_by,
+                now
+            ],
+        )?;
+        Ok(())
+    }
 
-pub fn list_scan_runs(&self) -> Result<Vec<(i64, String, String, String, Option<String>)>> {
-    let conn = self.conn.lock().expect("sqlite mutex poisoned");
-    let mut stmt = conn.prepare(
-        r#"
+    pub fn list_scan_runs(&self) -> Result<Vec<(i64, String, String, String, Option<String>)>> {
+        let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            r#"
         SELECT id, target, mode, status, finished_at
         FROM scan_runs
         ORDER BY id DESC
         "#,
-    )?;
+        )?;
 
-    let rows = stmt.query_map([], |r| {
-        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
-    })?;
+        let rows = stmt.query_map([], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+        })?;
 
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row?);
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
     }
-    Ok(out)
-}
 
-pub fn list_raw_findings_simple(
-    &self,
-    scan_run_id: i64,
-) -> Result<Vec<(i64, String, String, String, String, Option<i64>)>> {
-    let conn = self.conn.lock().expect("sqlite mutex poisoned");
-    let mut stmt = conn.prepare(
-        r#"
+    pub fn list_raw_findings_simple(
+        &self,
+        scan_run_id: i64,
+    ) -> Result<Vec<(i64, String, String, String, String, Option<i64>)>> {
+        let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            r#"
         SELECT id, source_path, finding_type, rule_name, match_text, line
         FROM raw_findings
         WHERE scan_run_id = ?1
         ORDER BY id DESC
         "#,
-    )?;
+        )?;
 
-    let rows = stmt.query_map(params![scan_run_id], |r| {
-        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))
-    })?;
+        let rows = stmt.query_map(params![scan_run_id], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
+        })?;
 
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row?);
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
     }
-    Ok(out)
-}
 
-pub fn list_analysis_findings_simple(
-    &self,
-    scan_run_id: i64,
-) -> Result<Vec<(i64, String, String, String, String, Option<String>, Option<f64>, Option<String>)>> {
-    let conn = self.conn.lock().expect("sqlite mutex poisoned");
-    let mut stmt = conn.prepare(
-        r#"
+    pub fn list_analysis_findings_simple(
+        &self,
+        scan_run_id: i64,
+    ) -> Result<
+        Vec<(
+            i64,
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<f64>,
+            Option<String>,
+        )>,
+    > {
+        let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            r#"
         SELECT
             id,
             source_path,
@@ -692,53 +723,68 @@ pub fn list_analysis_findings_simple(
         WHERE scan_run_id = ?1
         ORDER BY id DESC
         "#,
-    )?;
+        )?;
 
-    let rows = stmt.query_map(params![scan_run_id], |r| {
-        Ok((
-            r.get(0)?,
-            r.get(1)?,
-            r.get(2)?,
-            r.get(3)?,
-            r.get(4)?,
-            r.get(5)?,
-            r.get(6)?,
-            r.get(7)?,
-        ))
-    })?;
+        let rows = stmt.query_map(params![scan_run_id], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+                r.get(7)?,
+            ))
+        })?;
 
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row?);
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
     }
-    Ok(out)
-}
 
-pub fn list_screenshots_simple(
-    &self,
-    scan_run_id: i64,
-) -> Result<Vec<(i64, String, String, Option<String>, Option<f64>, Option<String>)>> {
-    let conn = self.conn.lock().expect("sqlite mutex poisoned");
-    let mut stmt = conn.prepare(
-        r#"
+    pub fn list_screenshots_simple(
+        &self,
+        scan_run_id: i64,
+    ) -> Result<
+        Vec<(
+            i64,
+            String,
+            String,
+            Option<String>,
+            Option<f64>,
+            Option<String>,
+        )>,
+    > {
+        let conn = self.conn.lock().expect("sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            r#"
         SELECT id, page_url, local_path, ml_label, ml_score, user_label
         FROM screenshots
         WHERE scan_run_id = ?1
         ORDER BY id DESC
         "#,
-    )?;
+        )?;
 
-    let rows = stmt.query_map(params![scan_run_id], |r| {
-        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))
-    })?;
+        let rows = stmt.query_map(params![scan_run_id], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
+        })?;
 
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row?);
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
     }
-    Ok(out)
-}
-
 }
 
 fn normalize_path_str(path: &str) -> String {

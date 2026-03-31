@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
 use std::{
     fs,
-    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -14,8 +13,8 @@ pub fn server(out_dir: &Path, port: u16) -> Result<()> {
 pub fn server_with_bind(out_dir: &Path, bind_host: &str, port: u16) -> Result<()> {
     use tiny_http::{Header, Method, Response, Server};
 
-    let server = Server::http(format!("{bind_host}:{port}"))
-        .map_err(|e| anyhow!("Server::http: {e}"))?;
+    let server =
+        Server::http(format!("{bind_host}:{port}")).map_err(|e| anyhow!("Server::http: {e}"))?;
 
     println!("Report available at: http://{bind_host}:{port}/");
     println!("Serving report from: {}", out_dir.display());
@@ -220,7 +219,8 @@ pub fn server_with_bind(out_dir: &Path, bind_host: &str, port: u16) -> Result<()
                 continue;
             };
 
-            let Some(run_id) = get_query_param(&url, "run_id").and_then(|v| v.parse::<i64>().ok()) else {
+            let Some(run_id) = get_query_param(&url, "run_id").and_then(|v| v.parse::<i64>().ok())
+            else {
                 let mut resp = resp_text(400, "missing ?run_id=\n");
                 add_cors(&mut resp);
                 let _ = rq.respond(resp);
@@ -251,7 +251,8 @@ pub fn server_with_bind(out_dir: &Path, bind_host: &str, port: u16) -> Result<()
                 continue;
             };
 
-            let Some(run_id) = get_query_param(&url, "run_id").and_then(|v| v.parse::<i64>().ok()) else {
+            let Some(run_id) = get_query_param(&url, "run_id").and_then(|v| v.parse::<i64>().ok())
+            else {
                 let mut resp = resp_text(400, "missing ?run_id=\n");
                 add_cors(&mut resp);
                 let _ = rq.respond(resp);
@@ -274,97 +275,101 @@ pub fn server_with_bind(out_dir: &Path, bind_host: &str, port: u16) -> Result<()
             continue;
         }
 
-if path_only == "/api/db/screenshots" && rq.method() == &Method::Get {
-    let Some(sqlite) = &sqlite else {
-        let mut resp = resp_text(404, "sqlite not found\n");
-        add_cors(&mut resp);
-        let _ = rq.respond(resp);
-        continue;
-    };
+        if path_only == "/api/db/screenshots" && rq.method() == &Method::Get {
+            let Some(sqlite) = &sqlite else {
+                let mut resp = resp_text(404, "sqlite not found\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
 
-    let Some(run_id) = get_query_param(&url, "run_id").and_then(|v| v.parse::<i64>().ok()) else {
-        let mut resp = resp_text(400, "missing ?run_id=\n");
-        add_cors(&mut resp);
-        let _ = rq.respond(resp);
-        continue;
-    };
+            let Some(run_id) = get_query_param(&url, "run_id").and_then(|v| v.parse::<i64>().ok())
+            else {
+                let mut resp = resp_text(400, "missing ?run_id=\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
 
-    match sqlite.list_screenshots_simple(run_id) {
-        Ok(rows) => {
-            let data: Vec<serde_json::Value> = rows.into_iter().map(
-                |(id, page_url, local_path, ml_label, ml_score, user_label)| {
-                    serde_json::json!({
-                        "id": id,
-                        "page_url": page_url,
-                        "file": local_path,
-                        "top_label": ml_label,
-                        "top_prob": ml_score,
-                        "user_label": user_label
-                    })
+            match sqlite.list_screenshots_simple(run_id) {
+                Ok(rows) => {
+                    let data: Vec<serde_json::Value> = rows
+                        .into_iter()
+                        .map(
+                            |(id, page_url, local_path, ml_label, ml_score, user_label)| {
+                                serde_json::json!({
+                                    "id": id,
+                                    "page_url": page_url,
+                                    "file": local_path,
+                                    "top_label": ml_label,
+                                    "top_prob": ml_score,
+                                    "user_label": user_label
+                                })
+                            },
+                        )
+                        .collect();
+
+                    let mut resp = resp_json(200, &data)?;
+                    add_cors(&mut resp);
+                    add_header(&mut resp, "Content-Type", "application/json; charset=utf-8");
+                    let _ = rq.respond(resp);
                 }
-            ).collect();
-
-            let mut resp = resp_json(200, &data)?;
-            add_cors(&mut resp);
-            add_header(&mut resp, "Content-Type", "application/json; charset=utf-8");
-            let _ = rq.respond(resp);
-        }
-        Err(e) => {
-            let mut resp = resp_text(500, format!("500: {e}\n"));
-            add_cors(&mut resp);
-            let _ = rq.respond(resp);
-        }
-    }
-    continue;
-}
-if path_only == "/api/db/latest_run" && rq.method() == &Method::Get {
-    let Some(sqlite) = &sqlite else {
-        let mut resp = resp_text(404, "sqlite not found\n");
-        add_cors(&mut resp);
-        let _ = rq.respond(resp);
-        continue;
-    };
-
-    match sqlite.list_scan_runs() {
-        Ok(rows) => {
-            let mut latest_with_screens = None;
-
-            for r in rows {
-                let run_id = r.0;
-                let mode = &r.2;
-                let status = &r.3;
-
-                if mode != "images" || status != "success" {
-                    continue;
-                }
-
-                match sqlite.list_screenshots_simple(run_id) {
-                    Ok(shots) if !shots.is_empty() => {
-                        latest_with_screens = Some(serde_json::json!({
-                            "id": r.0,
-                            "target": r.1,
-                            "mode": r.2,
-                            "status": r.3
-                        }));
-                        break;
-                    }
-                    _ => {}
+                Err(e) => {
+                    let mut resp = resp_text(500, format!("500: {e}\n"));
+                    add_cors(&mut resp);
+                    let _ = rq.respond(resp);
                 }
             }
+            continue;
+        }
+        if path_only == "/api/db/latest_run" && rq.method() == &Method::Get {
+            let Some(sqlite) = &sqlite else {
+                let mut resp = resp_text(404, "sqlite not found\n");
+                add_cors(&mut resp);
+                let _ = rq.respond(resp);
+                continue;
+            };
 
-            let mut resp = resp_json(200, &latest_with_screens)?;
-            add_cors(&mut resp);
-            add_header(&mut resp, "Content-Type", "application/json; charset=utf-8");
-            let _ = rq.respond(resp);
+            match sqlite.list_scan_runs() {
+                Ok(rows) => {
+                    let mut latest_with_screens = None;
+
+                    for r in rows {
+                        let run_id = r.0;
+                        let mode = &r.2;
+                        let status = &r.3;
+
+                        if mode != "images" || status != "success" {
+                            continue;
+                        }
+
+                        match sqlite.list_screenshots_simple(run_id) {
+                            Ok(shots) if !shots.is_empty() => {
+                                latest_with_screens = Some(serde_json::json!({
+                                    "id": r.0,
+                                    "target": r.1,
+                                    "mode": r.2,
+                                    "status": r.3
+                                }));
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    let mut resp = resp_json(200, &latest_with_screens)?;
+                    add_cors(&mut resp);
+                    add_header(&mut resp, "Content-Type", "application/json; charset=utf-8");
+                    let _ = rq.respond(resp);
+                }
+                Err(e) => {
+                    let mut resp = resp_text(500, format!("500: {e}\n"));
+                    add_cors(&mut resp);
+                    let _ = rq.respond(resp);
+                }
+            }
+            continue;
         }
-        Err(e) => {
-            let mut resp = resp_text(500, format!("500: {e}\n"));
-            add_cors(&mut resp);
-            let _ = rq.respond(resp);
-        }
-    }
-    continue;
-}
         if path_only.starts_with("/api/db/screenshots/")
             && path_only.ends_with("/label")
             && rq.method() == &Method::Post
@@ -635,8 +640,12 @@ fn sync_annotations_csv_to_db(path: &Path, sqlite: &SqliteStorage) -> Result<()>
         .position(|h| matches!(h, "label" | "user_label" | "class"))
         .ok_or_else(|| anyhow!("annotations.csv: no label column"))?;
 
-    let note_idx = headers.iter().position(|h| matches!(h, "note" | "analyst_note"));
-    let updated_by_idx = headers.iter().position(|h| matches!(h, "updated_by" | "user" | "who"));
+    let note_idx = headers
+        .iter()
+        .position(|h| matches!(h, "note" | "analyst_note"));
+    let updated_by_idx = headers
+        .iter()
+        .position(|h| matches!(h, "updated_by" | "user" | "who"));
 
     for rec in rdr.records() {
         let rec = rec?;
@@ -648,7 +657,9 @@ fn sync_annotations_csv_to_db(path: &Path, sqlite: &SqliteStorage) -> Result<()>
         }
 
         let analyst_note = note_idx.and_then(|i| rec.get(i)).map(|s| s.to_string());
-        let updated_by = updated_by_idx.and_then(|i| rec.get(i)).map(|s| s.to_string());
+        let updated_by = updated_by_idx
+            .and_then(|i| rec.get(i))
+            .map(|s| s.to_string());
 
         if let Some(shot) = sqlite.find_screenshot_by_local_path(&local_path)? {
             sqlite.update_screenshot_user_label(

@@ -6,19 +6,18 @@ use core::analysis::PathsLike;
 use core::patterns::{scan_patterns, should_ignore_path, ScanHit};
 use core::utils::{sanitize_filename, save_bytes};
 
-
-use storage::NewScreenshot;
-use sha2::{Digest, Sha256};
 use anyhow::Result as AnyResult;
 use reqwest::Client;
 use select::{document::Document, predicate::Attr};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
     io::Read,
     path::{Path, PathBuf},
 };
+use storage::NewScreenshot;
 use tokio::task;
 use url::Url;
 
