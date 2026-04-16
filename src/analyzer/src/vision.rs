@@ -24,13 +24,13 @@ const INPUT_H: usize = 224;
 pub struct Labels(pub Vec<String>);
 
 impl Labels {
-    pub fn eyeballer_default() -> Self {
+    pub fn eyehound_default() -> Self {
         Self(vec![
-            "boring".into(),
-            "interesting".into(),
+            "custom404".into(),
             "login".into(),
-            "error".into(),
-            "other".into(),
+            "webapp".into(),
+            "oldlooking".into(),
+            "parked".into(),
         ])
     }
 }
@@ -46,7 +46,7 @@ pub struct EyeballerRunner {
 impl EyeballerRunner {
     pub fn new(model_path: impl AsRef<Path>, labels: Labels) -> Result<Self> {
         let env = Environment::builder()
-            .with_name("eyeballer")
+            .with_name("eyehound")
             .with_log_level(LoggingLevel::Warning)
             .build()
             .map_err(|e| anyhow!("Environment::build: {e}"))?;
@@ -70,24 +70,6 @@ impl EyeballerRunner {
             input_name,
             labels,
         })
-    }
-
-    fn softmax(&self, mut v: Vec<f32>) -> Vec<f32> {
-        if v.is_empty() {
-            return v;
-        }
-        let m = v.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
-        let mut s = 0.0;
-        for x in v.iter_mut() {
-            *x = (*x - m).exp();
-            s += *x;
-        }
-        if s > 0.0 {
-            for x in v.iter_mut() {
-                *x /= s;
-            }
-        }
-        v
     }
 
     fn is_img_ext(ext: &str) -> bool {
@@ -120,9 +102,6 @@ impl EyeballerRunner {
         Ok(files)
     }
 
-    /// Best-effort открытие изображения:
-    /// - определяем формат по сигнатуре (magic bytes), а не по расширению
-    /// - если файл битый / не-картинка — вернём Err (вызовущий код должен skip)
     fn open_image_best_effort(&self, p: &Path) -> Result<image::DynamicImage> {
         let reader = ImageReader::open(p)
             .with_context(|| format!("open image file: {}", p.display()))?
@@ -134,14 +113,6 @@ impl EyeballerRunner {
             .with_context(|| format!("decode image: {}", p.display()))
     }
 
-    /// Прогон папки со скриншотами → predictions.csv + index.html
-    /// Дополнительно создаёт annotations.csv (если его ещё нет):
-    ///   file,manual_label
-    /// где manual_label по умолчанию = top_label (предсказание модели).
-    ///
-    /// Ожидаемый layout для режима без копирования картинок:
-    ///   images_dir = .../screens
-    ///   out_dir    = .../screens/report
     pub fn infer_to_csv_html(
         &self,
         images_dir: &Path,
@@ -151,7 +122,6 @@ impl EyeballerRunner {
     ) -> Result<(PathBuf, PathBuf)> {
         fs::create_dir_all(out_dir).with_context(|| format!("mkdir -p {}", out_dir.display()))?;
 
-        // Для текущего режима сервера: он берёт файлы из parent(out_dir) как fallback.
         if out_dir.parent() != Some(images_dir) {
             return Err(anyhow!(
                 "Для режима без копирования ожидается out_dir = images_dir/report. \
@@ -165,7 +135,6 @@ impl EyeballerRunner {
         let mut w = Writer::from_path(&csv_path)
             .with_context(|| format!("open csv for write: {}", csv_path.display()))?;
 
-        // Заголовок predictions.csv
         let mut header = vec!["file".into(), "top_label".into(), "top_prob".into()];
         for l in &self.labels.0 {
             header.push(format!("p_{}", l));
@@ -174,17 +143,11 @@ impl EyeballerRunner {
 
         let files = self.collect_images(images_dir)?;
         let ncls = self.labels.0.len();
-
-        // Стартовая разметка: file -> predicted label (только для успешно обработанных)
         let mut initial_ann: Vec<(String, String)> = Vec::new();
-
-        // Список пропущенных файлов (битые/не-картинки)
         let mut skipped: Vec<(PathBuf, String)> = Vec::new();
-
         let mut processed = 0usize;
 
         for p in files {
-            // --- ВАЖНО: НЕ ПАДАЕМ НА БИТОМ ФАЙЛЕ, А SKIP ---
             let img = match self.open_image_best_effort(&p) {
                 Ok(img) => img,
                 Err(e) => {
@@ -197,16 +160,16 @@ impl EyeballerRunner {
             let img = img.resize_exact(INPUT_W as u32, INPUT_H as u32, FilterType::Triangle);
             let rgb = img.to_rgb8();
 
-            // HWC float32
             let mut hwc = Array3::<f32>::zeros((INPUT_H, INPUT_W, 3));
             for (y, x, px) in rgb.enumerate_pixels() {
                 let [r, g, b] = px.0;
-                hwc[(y as usize, x as usize, 0)] = r as f32 / 255.0;
-                hwc[(y as usize, x as usize, 1)] = g as f32 / 255.0;
-                hwc[(y as usize, x as usize, 2)] = b as f32 / 255.0;
+
+                // Для EyeHound MobileNet:
+                hwc[(y as usize, x as usize, 0)] = r as f32 / 127.5 - 1.0;
+                hwc[(y as usize, x as usize, 1)] = g as f32 / 127.5 - 1.0;
+                hwc[(y as usize, x as usize, 2)] = b as f32 / 127.5 - 1.0;
             }
 
-            // NHWC -> (1,H,W,C)
             let nhwc: Array4<f32> = hwc.insert_axis(Axis(0));
             let input_dyn = nhwc.into_dyn();
             let input_cow: CowArray<f32, IxDyn> = CowArray::from(input_dyn.view());
@@ -215,18 +178,21 @@ impl EyeballerRunner {
             let outputs = self.session.run(vec![input_tensor])?;
             let out = outputs[0].try_extract::<f32>()?;
 
-            // FIX E0507
             let out_view = out.view();
             let out2: ArrayView2<f32> = out_view
                 .clone()
                 .into_dimensionality::<Ix2>()
                 .context("bad output rank")?;
 
-            let mut logits = vec![0.0_f32; ncls];
+            let mut probs = vec![0.0_f32; ncls];
             for c in 0..ncls {
-                logits[c] = out2[(0, c)];
+                probs[c] = out2[(0, c)];
             }
-            let probs = self.softmax(logits);
+
+            // Если ONNX вдруг экспортирован без sigmoid, включи это:
+            // for p in probs.iter_mut() {
+            //     *p = 1.0 / (1.0 + (-*p).exp());
+            // }
 
             let (mut top_i, mut top_p) = (0usize, f32::MIN);
             for (j, &pv) in probs.iter().enumerate() {
@@ -243,29 +209,22 @@ impl EyeballerRunner {
                 .cloned()
                 .unwrap_or_else(|| top_i.to_string());
 
-            // В CSV кладём путь относительно images_dir (без ../),
-            // чтобы браузер запрашивал "/file.png".
             let rel_in_images = p.strip_prefix(images_dir).unwrap_or(&p);
             let rel_str = rel_in_images.to_string_lossy().replace('\\', "/");
 
-            // predictions row
             let mut row = vec![rel_str.clone(), top_label.clone(), format!("{:.6}", top_p)];
             for j in 0..ncls {
                 row.push(format!("{:.6}", probs[j]));
             }
             w.write_record(&row)?;
 
-            // initial annotation
             initial_ann.push((rel_str, top_label));
-
             processed += 1;
         }
 
         w.flush()?;
 
-        // Если вообще ничего не обработали — это не "успех"
         if processed == 0 {
-            // чтобы было видно почему, сохраняем skipped_images.tsv
             if !skipped.is_empty() {
                 let mut out = String::new();
                 for (p, err) in &skipped {
@@ -275,37 +234,16 @@ impl EyeballerRunner {
                 let _ = fs::write(out_dir.join("skipped_images.tsv"), out);
             }
             return Err(anyhow!(
-                "Не удалось декодировать ни одного изображения из {} (все файлы оказались битые/не-картинки).",
+                "Не удалось декодировать ни одного изображения из {}.",
                 images_dir.display()
             ));
         }
 
-        // Сохраняем список пропусков (если были)
-        if !skipped.is_empty() {
-            let mut out = String::new();
-            for (p, err) in &skipped {
-                let one_line = err.replace(['\n', '\r'], " ");
-                out.push_str(&format!("{}\t{}\n", p.display(), one_line));
-            }
-            let _ = fs::write(out_dir.join("skipped_images.tsv"), out);
-            eprintln!(
-                "[warn] skipped {} files (see {}/skipped_images.tsv)",
-                skipped.len(),
-                out_dir.display()
-            );
-        }
-
-        // annotations.csv — создаём только если его ещё нет
-        // Формат one-hot:
-        // filename,<label1>,<label2>,...
-        // img.png,FALSE,TRUE,...
         let ann_path = out_dir.join("annotations.csv");
         if !ann_path.is_file() {
-            let mut aw = Writer::from_path(&ann_path).with_context(|| {
-                format!("open annotations csv for write: {}", ann_path.display())
-            })?;
+            let mut aw = Writer::from_path(&ann_path)
+                .with_context(|| format!("open annotations csv for write: {}", ann_path.display()))?;
 
-            // header
             let mut header: Vec<String> = Vec::with_capacity(1 + self.labels.0.len());
             header.push("filename".to_string());
             header.extend(self.labels.0.iter().cloned());
@@ -315,15 +253,10 @@ impl EyeballerRunner {
                 let mut rec: Vec<String> = Vec::with_capacity(1 + self.labels.0.len());
                 rec.push(f);
                 for l in &self.labels.0 {
-                    rec.push(if l == &lbl {
-                        "TRUE".into()
-                    } else {
-                        "FALSE".into()
-                    });
+                    rec.push(if l == &lbl { "TRUE".into() } else { "FALSE".into() });
                 }
                 aw.write_record(&rec)?;
             }
-
             aw.flush()?;
         }
 

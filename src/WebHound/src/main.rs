@@ -287,7 +287,7 @@ fn analyze_and_maybe_serve(
 ) -> Result<()> {
     fs::create_dir_all(out_dir).map_err(|e| anyhow!("Не создать {}: {e}", out_dir.display()))?;
 
-    let runner = EyeballerRunner::new(model, Labels::eyeballer_default())?;
+    let runner = EyeballerRunner::new(model, Labels::eyehound_default())?;
     let (_csv, html) = runner.infer_to_csv_html(images_dir, out_dir, "predictions.csv", None)?;
 
     println!("Отчёт: {}", html.display());
