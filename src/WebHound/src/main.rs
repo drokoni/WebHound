@@ -54,7 +54,7 @@ impl From<StorageBackend> for StorageMode {
 #[derive(Args, Debug, Clone)]
 #[command(next_help_heading = "Storage options")]
 struct StorageArgs {
-    #[arg(long, value_enum, default_value_t = StorageBackend::Files)]
+    #[arg(long, value_enum, default_value_t = StorageBackend::Db)]
     storage: StorageBackend,
 }
 
