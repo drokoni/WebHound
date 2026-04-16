@@ -57,6 +57,10 @@ impl TextAnalyzerConfig {
     pub fn metadata_path(&self) -> PathBuf {
         self.model_dir.join("export_metadata.json")
     }
+
+    pub fn char_vocab_path(&self) -> PathBuf {
+        self.model_dir.join("char_vocab.json")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,19 +77,41 @@ struct ExportMetadata {
     #[serde(default)]
     pub model_name: Option<String>,
     #[serde(default)]
+    pub model_type: Option<String>, // "hf_transformer" | "custom_charcnn"
+    #[serde(default)]
     pub num_labels: Option<usize>,
     #[serde(default)]
     pub id2label: BTreeMap<String, String>,
     #[serde(default)]
     pub max_position_embeddings: Option<usize>,
     #[serde(default)]
+    pub char_max_len: Option<usize>,
+    #[serde(default)]
     pub architectures: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CharVocabFile {
+    #[serde(default)]
+    pub pad_id: i64,
+    #[serde(default)]
+    pub unk_id: i64,
+    pub stoi: BTreeMap<String, i64>,
+}
+
+enum TextBackend {
+    Hf { tokenizer: Tokenizer },
+    CharCnn {
+        stoi: BTreeMap<char, i64>,
+        pad_id: i64,
+        unk_id: i64,
+    },
 }
 
 pub struct TextClassifier {
     _env: Arc<Environment>,
     session: Session,
-    tokenizer: Tokenizer,
+    backend: TextBackend,
     labels: Vec<String>,
     max_length: usize,
     use_path_prefix: bool,
@@ -95,12 +121,6 @@ impl TextClassifier {
     pub fn new(cfg: TextAnalyzerConfig) -> Result<Self> {
         if !cfg.model_path().is_file() {
             bail!("ONNX model not found: {}", cfg.model_path().display());
-        }
-        if !cfg.tokenizer_path().is_file() {
-            bail!(
-                "tokenizer.json not found: {}",
-                cfg.tokenizer_path().display()
-            );
         }
         if !cfg.metadata_path().is_file() {
             bail!("metadata not found: {}", cfg.metadata_path().display());
@@ -127,25 +147,87 @@ impl TextClassifier {
             .with_model_from_file(cfg.model_path())
             .map_err(|e| anyhow!("with_model_from_file: {e}"))?;
 
-        let mut tokenizer = Tokenizer::from_file(cfg.tokenizer_path())
-            .map_err(|e| anyhow!("Tokenizer::from_file: {e}"))?;
-        tokenizer
-            .with_truncation(Some(TruncationParams {
-                max_length: cfg.max_length,
-                ..Default::default()
-            }))
-            .map_err(|e| anyhow!("tokenizer truncation: {e}"))?;
-        tokenizer.with_padding(Some(PaddingParams {
-            strategy: PaddingStrategy::Fixed(cfg.max_length),
-            ..Default::default()
-        }));
+        let model_type = metadata
+            .model_type
+            .as_deref()
+            .unwrap_or("hf_transformer")
+            .to_string();
+
+        let (backend, max_length) = match model_type.as_str() {
+            "custom_charcnn" => {
+                if !cfg.char_vocab_path().is_file() {
+                    bail!(
+                        "char_vocab.json not found for custom_charcnn: {}",
+                        cfg.char_vocab_path().display()
+                    );
+                }
+
+                let vocab: CharVocabFile = serde_json::from_slice(
+                    &fs::read(cfg.char_vocab_path())
+                        .with_context(|| format!("read {}", cfg.char_vocab_path().display()))?,
+                )
+                .with_context(|| format!("parse {}", cfg.char_vocab_path().display()))?;
+
+                if vocab.stoi.is_empty() {
+                    bail!("char_vocab.json has empty stoi");
+                }
+
+                let mut stoi = BTreeMap::new();
+                for (k, v) in vocab.stoi {
+                    let mut chars = k.chars();
+                    let ch = chars
+                        .next()
+                        .ok_or_else(|| anyhow!("empty key in char_vocab.json"))?;
+                    if chars.next().is_some() {
+                        bail!("char_vocab key must be exactly one character, got {:?}", k);
+                    }
+                    stoi.insert(ch, v);
+                }
+
+                let max_length = metadata.char_max_len.unwrap_or(cfg.max_length);
+
+                (
+                    TextBackend::CharCnn {
+                        stoi,
+                        pad_id: vocab.pad_id,
+                        unk_id: vocab.unk_id,
+                    },
+                    max_length,
+                )
+            }
+            _ => {
+                if !cfg.tokenizer_path().is_file() {
+                    bail!(
+                        "tokenizer.json not found: {}",
+                        cfg.tokenizer_path().display()
+                    );
+                }
+
+                let mut tokenizer = Tokenizer::from_file(cfg.tokenizer_path())
+                    .map_err(|e| anyhow!("Tokenizer::from_file: {e}"))?;
+
+                tokenizer
+                    .with_truncation(Some(TruncationParams {
+                        max_length: cfg.max_length,
+                        ..Default::default()
+                    }))
+                    .map_err(|e| anyhow!("tokenizer truncation: {e}"))?;
+
+                tokenizer.with_padding(Some(PaddingParams {
+                    strategy: PaddingStrategy::Fixed(cfg.max_length),
+                    ..Default::default()
+                }));
+
+                (TextBackend::Hf { tokenizer }, cfg.max_length)
+            }
+        };
 
         Ok(Self {
             _env: env,
             session,
-            tokenizer,
+            backend,
             labels,
-            max_length: cfg.max_length,
+            max_length,
             use_path_prefix: cfg.use_path_prefix,
         })
     }
@@ -153,47 +235,77 @@ impl TextClassifier {
     pub fn predict_text(&self, text: &str, path: Option<&str>) -> Result<TextPrediction> {
         let model_text = build_model_text(text, path, self.use_path_prefix);
 
-        let enc = self
-            .tokenizer
-            .encode(model_text.clone(), true)
-            .map_err(|e| anyhow!("tokenizer.encode: {e}"))?;
+        let outputs = match &self.backend {
+            TextBackend::Hf { tokenizer } => {
+                let enc = tokenizer
+                    .encode(model_text.clone(), true)
+                    .map_err(|e| anyhow!("tokenizer.encode: {e}"))?;
 
-        let ids: Vec<i64> = enc.get_ids().iter().map(|&v| v as i64).collect();
-        let mask: Vec<i64> = enc.get_attention_mask().iter().map(|&v| v as i64).collect();
+                let ids: Vec<i64> = enc.get_ids().iter().map(|&v| v as i64).collect();
+                let mask: Vec<i64> = enc
+                    .get_attention_mask()
+                    .iter()
+                    .map(|&v| v as i64)
+                    .collect();
 
-        if ids.is_empty() || mask.is_empty() {
-            bail!("tokenizer produced empty input");
-        }
-        if ids.len() != mask.len() {
-            bail!(
-                "tokenizer mismatch: input_ids={} attention_mask={}",
-                ids.len(),
-                mask.len()
-            );
-        }
+                if ids.is_empty() || mask.is_empty() {
+                    bail!("tokenizer produced empty input");
+                }
+                if ids.len() != mask.len() {
+                    bail!(
+                        "tokenizer mismatch: input_ids={} attention_mask={}",
+                        ids.len(),
+                        mask.len()
+                    );
+                }
 
-        let seq_len = ids.len();
+                let seq_len = ids.len();
 
-        let ids_arr = Array2::from_shape_vec((1, seq_len), ids)
-            .context("build input_ids ndarray")?
-            .into_dyn();
+                let ids_arr = Array2::from_shape_vec((1, seq_len), ids)
+                    .context("build input_ids ndarray")?
+                    .into_dyn();
 
-        let mask_arr = Array2::from_shape_vec((1, seq_len), mask)
-            .context("build attention_mask ndarray")?
-            .into_dyn();
+                let mask_arr = Array2::from_shape_vec((1, seq_len), mask)
+                    .context("build attention_mask ndarray")?
+                    .into_dyn();
 
-        let ids_cow: CowArray<'_, i64, IxDyn> = CowArray::from(ids_arr.view());
-        let mask_cow: CowArray<'_, i64, IxDyn> = CowArray::from(mask_arr.view());
+                let ids_cow: CowArray<'_, i64, IxDyn> = CowArray::from(ids_arr.view());
+                let mask_cow: CowArray<'_, i64, IxDyn> = CowArray::from(mask_arr.view());
 
-        let ids_tensor = Value::from_array(self.session.allocator(), &ids_cow)
-            .map_err(|e| anyhow!("Value::from_array(input_ids): {e}"))?;
-        let mask_tensor = Value::from_array(self.session.allocator(), &mask_cow)
-            .map_err(|e| anyhow!("Value::from_array(attention_mask): {e}"))?;
+                let ids_tensor = Value::from_array(self.session.allocator(), &ids_cow)
+                    .map_err(|e| anyhow!("Value::from_array(input_ids): {e}"))?;
+                let mask_tensor = Value::from_array(self.session.allocator(), &mask_cow)
+                    .map_err(|e| anyhow!("Value::from_array(attention_mask): {e}"))?;
 
-        let outputs = self
-            .session
-            .run(vec![ids_tensor, mask_tensor])
-            .map_err(|e| anyhow!("session.run: {e}"))?;
+                self.session
+                    .run(vec![ids_tensor, mask_tensor])
+                    .map_err(|e| anyhow!("session.run: {e}"))?
+            }
+
+            TextBackend::CharCnn {
+                stoi,
+                pad_id,
+                unk_id,
+            } => {
+                let ids = encode_charcnn(&model_text, stoi, *pad_id, *unk_id, self.max_length);
+
+                if ids.is_empty() {
+                    bail!("charcnn produced empty input");
+                }
+
+                let ids_arr = Array2::from_shape_vec((1, self.max_length), ids)
+                    .context("build charcnn input_ids ndarray")?
+                    .into_dyn();
+
+                let ids_cow: CowArray<'_, i64, IxDyn> = CowArray::from(ids_arr.view());
+                let ids_tensor = Value::from_array(self.session.allocator(), &ids_cow)
+                    .map_err(|e| anyhow!("Value::from_array(input_ids): {e}"))?;
+
+                self.session
+                    .run(vec![ids_tensor])
+                    .map_err(|e| anyhow!("session.run(charcnn): {e}"))?
+            }
+        };
 
         let out = outputs
             .get(0)
@@ -340,6 +452,26 @@ fn build_model_text(text: &str, path: Option<&str>, use_path_prefix: bool) -> St
         }
     }
     text.to_string()
+}
+
+fn encode_charcnn(
+    text: &str,
+    stoi: &BTreeMap<char, i64>,
+    pad_id: i64,
+    unk_id: i64,
+    max_len: usize,
+) -> Vec<i64> {
+    let mut ids: Vec<i64> = text
+        .chars()
+        .take(max_len)
+        .map(|ch| *stoi.get(&ch).unwrap_or(&unk_id))
+        .collect();
+
+    if ids.len() < max_len {
+        ids.resize(max_len, pad_id);
+    }
+
+    ids
 }
 
 fn prediction_from_logits(

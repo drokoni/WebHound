@@ -1,9 +1,27 @@
 {
-  "model_name": "modernbert_base",
-  "source_model_dir": "/mnt/ml/benchmark_outputs/multiclass/modernbert_base/checkpoint-1487",
-  "source_tokenizer_dir": "/mnt/ml/benchmark_outputs/multiclass/modernbert_base/checkpoint-1487",
-  "onnx_path": "/mnt/ml/onnx_exports/modernbert_base/model.onnx",
+  "model_name": "custom_charcnn",
+  "source_run_dir": "/mnt/ml/benchmark_outputs/multiclass_realistic_v3/classical_custom/custom_charcnn",
+  "source_state_path": "/mnt/ml/benchmark_outputs/multiclass_realistic_v3/classical_custom/custom_charcnn/charcnn_state.pt",
+  "source_vocab_path": "/mnt/ml/benchmark_outputs/multiclass_realistic_v3/classical_custom/custom_charcnn/char_vocab.json",
+  "onnx_path": "/mnt/ml/onnx_exports/custom_charcnn/model.onnx",
+  "char_max_len": 512,
+  "vocab_size": 160,
+  "embedding_dim": 64,
+  "channels": 128,
+  "kernels": [
+    3,
+    5,
+    7
+  ],
   "num_labels": 6,
+  "label2id": {
+    "API_KEY": 0,
+    "JWT": 1,
+    "NOT_SECRET": 2,
+    "OTHER_SECRET": 3,
+    "PRIVATE_KEY": 4,
+    "TOKEN": 5
+  },
   "id2label": {
     "0": "API_KEY",
     "1": "JWT",
@@ -11,9 +29,5 @@
     "3": "OTHER_SECRET",
     "4": "PRIVATE_KEY",
     "5": "TOKEN"
-  },
-  "max_position_embeddings": 8192,
-  "architectures": [
-    "ModernBertForSequenceClassification"
-  ]
+  }
 }
