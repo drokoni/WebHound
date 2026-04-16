@@ -245,7 +245,7 @@ impl EyeballerRunner {
                 .with_context(|| format!("open annotations csv for write: {}", ann_path.display()))?;
 
             let mut header: Vec<String> = Vec::with_capacity(1 + self.labels.0.len());
-            header.push("filename".to_string());
+            header.push("file".to_string());
             header.extend(self.labels.0.iter().cloned());
             aw.write_record(&header)?;
 
