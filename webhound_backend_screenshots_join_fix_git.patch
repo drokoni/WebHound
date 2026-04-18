@@ -1,0 +1,144 @@
+--- a/src/storage/src/sqlite.rs
++++ b/src/storage/src/sqlite.rs
+@@ -4,6 +4,7 @@
+ use anyhow::{Context, Result};
+ use chrono::Utc;
+ use rusqlite::{params, Connection};
++use std::collections::HashMap;
+ use std::path::Path;
+ use std::sync::{Arc, Mutex};
+ 
+@@ -759,6 +760,133 @@
+         )>,
+     > {
+         let conn = self.conn.lock().expect("sqlite mutex poisoned");
++
++        // Prefer rows backed by vision_predictions for this run. In `images --storage db`
++        // predictions are often stored under a dedicated images-run while the real
++        // screenshot rows remain attached to the original scan-run. In that case
++        // vision_predictions.local_path may not point at the actual file on disk and
++        // screenshot_id can be NULL, so we resolve the real screenshot row by:
++        //   1) screenshot_id
++        //   2) exact normalized local_path
++        //   3) basename match as a fallback
++        let mut vp_stmt = conn.prepare(
++            r#"
++        SELECT id, screenshot_id, local_path, top_label, top_prob
++        FROM vision_predictions
++        WHERE scan_run_id = ?1
++        ORDER BY id DESC
++        "#,
++        )?;
++
++        let vp_rows = vp_stmt.query_map(params![scan_run_id], |r| {
++            Ok((
++                r.get::<_, i64>(0)?,
++                r.get::<_, Option<i64>>(1)?,
++                r.get::<_, String>(2)?,
++                r.get::<_, String>(3)?,
++                r.get::<_, f64>(4)?,
++            ))
++        })?;
++
++        let mut vps = Vec::new();
++        for row in vp_rows {
++            vps.push(row?);
++        }
++
++        if !vps.is_empty() {
++            let mut shots_stmt = conn.prepare(
++                r#"
++            SELECT id, page_url, local_path, user_label
++            FROM screenshots
++            ORDER BY id DESC
++            "#,
++            )?;
++
++            let shot_rows = shots_stmt.query_map([], |r| {
++                Ok((
++                    r.get::<_, i64>(0)?,
++                    r.get::<_, String>(1)?,
++                    r.get::<_, String>(2)?,
++                    r.get::<_, Option<String>>(3)?,
++                ))
++            })?;
++
++            #[derive(Clone)]
++            struct ShotLite {
++                id: i64,
++                page_url: String,
++                local_path: String,
++                user_label: Option<String>,
++            }
++
++            let mut by_id: HashMap<i64, ShotLite> = HashMap::new();
++            let mut by_path: HashMap<String, ShotLite> = HashMap::new();
++            let mut by_basename: HashMap<String, ShotLite> = HashMap::new();
++
++            for row in shot_rows {
++                let (id, page_url, local_path, user_label) = row?;
++                let shot = ShotLite {
++                    id,
++                    page_url,
++                    local_path: local_path.clone(),
++                    user_label,
++                };
++
++                by_id.entry(id).or_insert_with(|| shot.clone());
++                by_path
++                    .entry(normalize_path_str(&local_path))
++                    .or_insert_with(|| shot.clone());
++
++                if let Some(base) = Path::new(&local_path)
++                    .file_name()
++                    .map(|s| s.to_string_lossy().to_string())
++                {
++                    by_basename.entry(base).or_insert_with(|| shot.clone());
++                }
++            }
++
++            let mut out = Vec::with_capacity(vps.len());
++
++            for (vp_id, screenshot_id, vp_local_path, top_label, top_prob) in vps {
++                let normalized_vp = normalize_path_str(&vp_local_path);
++                let basename = Path::new(&vp_local_path)
++                    .file_name()
++                    .map(|s| s.to_string_lossy().to_string());
++
++                let matched = screenshot_id
++                    .and_then(|sid| by_id.get(&sid))
++                    .or_else(|| by_path.get(&normalized_vp))
++                    .or_else(|| basename.as_ref().and_then(|b| by_basename.get(b)));
++
++                let (id, page_url, local_path, user_label) = if let Some(shot) = matched {
++                    (
++                        shot.id,
++                        shot.page_url.clone(),
++                        shot.local_path.clone(),
++                        shot.user_label.clone(),
++                    )
++                } else {
++                    (
++                        vp_id,
++                        String::new(),
++                        normalized_vp,
++                        None,
++                    )
++                };
++
++                out.push((
++                    id,
++                    page_url,
++                    local_path,
++                    Some(top_label),
++                    Some(top_prob),
++                    user_label,
++                ));
++            }
++
++            return Ok(out);
++        }
++
+         let mut stmt = conn.prepare(
+             r#"
+         SELECT id, page_url, local_path, ml_label, ml_score, user_label

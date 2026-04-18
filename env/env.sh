@@ -105,7 +105,7 @@ main() {
 
     local vision_model text_model_dir text_model text_metadata text_tokenizer
 
-    vision_model="$(resolve_if_exists "${repo_abs}/src/asset/ml/eyeballer.onnx" || true)"
+    vision_model="$(resolve_if_exists "${repo_abs}/src/asset/ml/eyehound_mobilenet.onnx" || true)"
     text_model_dir="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier" || true)"
     text_model="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier/model.onnx" || true)"
     text_metadata="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier/export_metadata.json" || true)"
@@ -128,7 +128,7 @@ export WEBHOUND_VISION_MODEL="${vision_model}"
 EOF
     else
         cat >>"$out" <<'EOF'
-# export WEBHOUND_VISION_MODEL="/path/to/WebHound/assets/ml/eyeballer.onnx"
+# export WEBHOUND_VISION_MODEL="/path/to/WebHound/assets/ml/eyehound_mobilenet.onnx "
 EOF
     fi
 

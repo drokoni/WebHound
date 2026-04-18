@@ -1,1822 +1,818 @@
 <!doctype html>
-<html lang="en">
-
+<html lang="ru">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>{TITLE}</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebHound report</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #0f172a;
+      --panel-2: #111b31;
+      --line: rgba(148,163,184,.18);
+      --line-2: rgba(148,163,184,.12);
+      --text: #e5eefc;
+      --muted: #9fb0d1;
+      --accent: #60a5fa;
+      --accent-2: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --shadow: 0 18px 48px rgba(0,0,0,.26);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; overflow-x: hidden; background: radial-gradient(circle at top, #102042 0%, var(--bg) 40%); color: var(--text); font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    a { color: #93c5fd; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .wrap { max-width: 1800px; margin: 0 auto; padding: 14px; }
+    .card { background: linear-gradient(180deg, rgba(15,23,42,.95), rgba(10,18,34,.95)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .topbar { padding: 18px 18px 14px; margin-bottom: 12px; }
+    .title { font-size: 32px; font-weight: 800; margin: 0 0 4px; }
+    .meta { color: var(--muted); }
+    .links { margin-top: 10px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .tabs { display: flex; gap: 10px; margin-top: 14px; }
+    .tabBtn, .btn { border: 1px solid var(--line); background: rgba(15,23,42,.8); color: var(--text); border-radius: 999px; padding: 10px 14px; cursor: pointer; }
+    .tabBtn.active { background: rgba(96,165,250,.18); border-color: rgba(96,165,250,.45); }
+    .btn:hover, .tabBtn:hover { border-color: rgba(148,163,184,.35); }
+    .btn-good { background: rgba(34,197,94,.14); }
+    .btn-danger { background: rgba(239,68,68,.14); }
+    .pane { display: none; }
+    .pane.active { display: block; }
+    .sectionCard { padding: 16px; margin-bottom: 12px; }
+    .controls { display: grid; gap: 10px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    input[type="text"], select, textarea {
+      width: 100%; min-width: 0; border: 1px solid var(--line); color: var(--text);
+      background: rgba(15,23,42,.88); border-radius: 14px; padding: 11px 12px; outline: none;
+    }
+    textarea { min-height: 88px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { border-color: rgba(96,165,250,.55); box-shadow: 0 0 0 3px rgba(96,165,250,.12); }
+    .pillrow { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill { border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; color: var(--muted); background: rgba(15,23,42,.78); }
+    .pill.ok { color: #bbf7d0; border-color: rgba(34,197,94,.35); }
+    .pill.warn { color: #fde68a; border-color: rgba(245,158,11,.35); }
+    .grid2 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(320px, .72fr); gap: 12px; align-items: start; }
+    .previewWrap { min-height: 520px; border: 1px solid var(--line-2); border-radius: 18px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: rgba(255,255,255,.02); min-width: 0; }
+    .previewWrap img { max-width: 100%; max-height: 76vh; display: block; object-fit: contain; }
+    .previewPlaceholder { color: var(--muted); }
+    .kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px 12px; min-width: 0; }
+    .k { color: var(--muted); }
+    .v { word-break: break-word; overflow-wrap: anywhere; min-width: 0; }
+    .thumbsHead { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 10px; }
+    .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+    .thumb { border: 1px solid var(--line); border-radius: 14px; padding: 8px; background: rgba(15,23,42,.68); cursor: pointer; min-width: 0; overflow: hidden; }
+    .thumb.active { border-color: rgba(96,165,250,.55); box-shadow: 0 0 0 3px rgba(96,165,250,.12); }
+    .thumb img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; background: rgba(255,255,255,.03); }
+    .thumb .t1, .thumb .t2 { margin-top: 6px; font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .thumb .t1 { color: var(--text); }
+    .thumb .t2 { color: var(--muted); }
+    .manualGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .check { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 14px; padding: 10px; background: rgba(15,23,42,.5); }
+    .check input { transform: scale(1.15); }
+    .tblWrap { overflow: auto; max-width: 100%; border: 1px solid var(--line-2); border-radius: 16px; }
+    table { width: 100%; min-width: 980px; table-layout: fixed; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line-2); vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
+    th { position: sticky; top: 0; background: rgba(17,27,49,.98); z-index: 2; cursor: pointer; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: rgba(96,165,250,.07); }
+    tbody tr.active { background: rgba(96,165,250,.11); }
+    .jsonlLayout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .7fr); gap: 12px; align-items: start; }
+    .code { white-space: pre-wrap; word-break: break-word; background: rgba(15,23,42,.68); border: 1px solid var(--line); border-radius: 14px; padding: 12px; min-height: 120px; }
+    .hl { background: rgba(245,158,11,.25); border-radius: 3px; }
+    .muted { color: var(--muted); }
+    .small { font-size: 12px; }
+    .hidden { display: none !important; }
+    #currentFile { word-break: break-word; overflow-wrap: anywhere; min-width: 0; }
+    .grid2 > *, .jsonlLayout > * { min-width: 0; }
+    .sectionCard { min-width: 0; overflow: hidden; }
+    .thumbsHead, .pillrow, .row { min-width: 0; }
+    .mono { overflow-wrap: anywhere; }
 
-    <style>
-         :root {
-            --bg: #0b0f14;
-            --panel: #0f1621;
-            --panel2: #111b2a;
-            --text: #e7eef9;
-            --muted: #a8b3c5;
-            --line: rgba(255, 255, 255, 0.08);
-            --accent: #6aa9ff;
-            --good: #38d996;
-            --warn: #ffcc66;
-            --bad: #ff6b6b;
-            --r: 16px;
-            --r2: 22px;
-            --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-            --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            --sans: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-        }
-        
-        @media (prefers-color-scheme: light) {
-             :root {
-                --bg: #f6f7fb;
-                --panel: #ffffff;
-                --panel2: #f7f9ff;
-                --text: #101828;
-                --muted: #667085;
-                --line: rgba(16, 24, 40, 0.12);
-                --shadow: 0 14px 32px rgba(16, 24, 40, 0.12);
-            }
-        }
-        
-        * {
-            box-sizing: border-box;
-        }
-        
-        body {
-            margin: 0;
-            font-family: var(--sans);
-            color: var(--text);
-            background: radial-gradient(1200px 800px at 15% -10%, rgba(106, 169, 255, 0.14), transparent 55%), radial-gradient(900px 600px at 105% 0%, rgba(56, 217, 150, 0.1), transparent 55%), var(--bg);
-        }
-        
-        a {
-            color: var(--accent);
-            text-decoration: none;
-        }
-        
-        a:hover {
-            text-decoration: underline;
-        }
-        
-        .app {
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            padding: 14px;
-        }
-        
-        .card {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
-            background-color: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: var(--r2);
-            box-shadow: var(--shadow);
-            overflow: hidden;
-        }
-        
-        .top {
-            padding: 14px;
-            border-bottom: 1px solid var(--line);
-        }
-        
-        h1 {
-            margin: 0;
-            font-size: 18px;
-            letter-spacing: 0.2px;
-        }
-        
-        .meta {
-            margin-top: 8px;
-            font-size: 12px;
-            color: var(--muted);
-            line-height: 1.5;
-        }
-        
-        .meta code {
-            font-family: var(--mono);
-            font-size: 11px;
-            padding: 1px 6px;
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.03);
-        }
-        
-        .tabs {
-            margin-top: 12px;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        
-        .tabBtn {
-            padding: 9px 12px;
-            border-radius: 999px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.03);
-            color: var(--text);
-            cursor: pointer;
-            font-size: 13px;
-            user-select: none;
-        }
-        
-        .tabBtn.active {
-            background: rgba(106, 169, 255, 0.16);
-            border-color: rgba(106, 169, 255, 0.3);
-        }
-        
-        .tabPane {
-            display: none;
-        }
-        
-        .tabPane.active {
-            display: block;
-        }
-        
-        .controls {
-            margin-top: 12px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        
-        .controls .row {
-            grid-column: 1/-1;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        
-        input,
-        select,
-        button {
-            color: var(--text);
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--line);
-            border-radius: 12px;
-            padding: 10px 10px;
-            font-size: 13px;
-            outline: none;
-        }
-        
-        input::placeholder {
-            color: rgba(168, 179, 197, 0.7);
-        }
-        
-        button {
-            cursor: pointer;
-            user-select: none;
-            background: rgba(106, 169, 255, 0.1);
-            border-color: rgba(106, 169, 255, 0.25);
-        }
-        
-        button:hover {
-            background: rgba(106, 169, 255, 0.16);
-        }
-        
-        .btn-ghost {
-            background: rgba(255, 255, 255, 0.03);
-            border-color: var(--line);
-        }
-        
-        .btn-good {
-            background: rgba(56, 217, 150, 0.12);
-            border-color: rgba(56, 217, 150, 0.28);
-        }
-        
-        .btn-good:hover {
-            background: rgba(56, 217, 150, 0.18);
-        }
-        
-        .btn-danger {
-            background: rgba(255, 107, 107, 0.12);
-            border-color: rgba(255, 107, 107, 0.28);
-        }
-        
-        .btn-danger:hover {
-            background: rgba(255, 107, 107, 0.18);
-        }
-        
-        .pillrow {
-            margin-top: 10px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        
-        .pill {
-            font-size: 12px;
-            padding: 4px 10px;
-            border-radius: 999px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.03);
-            color: var(--muted);
-            white-space: nowrap;
-        }
-        
-        .pill.good {
-            color: var(--good);
-            border-color: rgba(56, 217, 150, 0.25);
-            background: rgba(56, 217, 150, 0.08);
-        }
-        
-        .pill.warn {
-            color: var(--warn);
-            border-color: rgba(255, 204, 102, 0.25);
-            background: rgba(255, 204, 102, 0.08);
-        }
-        
-        .kbd {
-            font-family: var(--mono);
-            font-size: 11px;
-            padding: 2px 6px;
-            border-radius: 8px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.03);
-            color: var(--muted);
-        }
-        
-        .head {
-            padding: 14px;
-            border-bottom: 1px solid var(--line);
-            display: flex;
-            gap: 10px;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        
-        .fileInfo {
-            font-family: var(--mono);
-            font-size: 12px;
-            color: var(--muted);
-            word-break: break-all;
-            max-width: 90ch;
-        }
-        
-        .viewer {
-            padding: 14px;
-            display: grid;
-            grid-template-columns: 1fr 420px;
-            gap: 14px;
-        }
-        
-        @media (max-width: 980px) {
-            .viewer {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .imgWrap {
-            border-radius: var(--r2);
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.02);
-            overflow: hidden;
-            min-height: 45vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-        
-        .bigimg {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            cursor: zoom-in;
-        }
-        
-        .imgHint {
-            position: absolute;
-            left: 12px;
-            bottom: 12px;
-            font-size: 12px;
-            color: var(--muted);
-            background: rgba(0, 0, 0, 0.28);
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            padding: 6px 10px;
-            border-radius: 999px;
-            backdrop-filter: blur(6px);
-        }
-        
-        @media (prefers-color-scheme: light) {
-            .imgHint {
-                background: rgba(255, 255, 255, 0.55);
-                border-color: rgba(16, 24, 40, 0.18);
-            }
-        }
-        
-        .section {
-            border: 1px solid var(--line);
-            border-radius: var(--r2);
-            background: rgba(255, 255, 255, 0.02);
-            padding: 12px;
-            margin-bottom: 12px;
-        }
-        
-        .section h3 {
-            margin: 0 0 8px 0;
-            font-size: 13px;
-            color: var(--muted);
-            font-weight: 600;
-        }
-        
-        .kv {
-            display: grid;
-            grid-template-columns: 92px 1fr;
-            gap: 8px;
-            align-items: center;
-            font-size: 13px;
-        }
-        
-        .kv .k {
-            color: var(--muted);
-        }
-        
-        .kv .v {
-            font-family: var(--mono);
-            font-size: 12px;
-        }
-        
-        .manualChecks {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
-        
-        .chk {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 10px;
-            border-radius: 12px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.02);
-            font-family: var(--mono);
-            font-size: 12px;
-            user-select: none;
-        }
-        
-        .chk input {
-            transform: scale(1.05);
-        }
-        
-        .probs {
-            margin-top: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        
-        .barrow {
-            display: grid;
-            grid-template-columns: 1fr 60px;
-            gap: 10px;
-            align-items: center;
-        }
-        
-        .barrow .lbl {
-            font-family: var(--mono);
-            font-size: 12px;
-        }
-        
-        .bar {
-            height: 10px;
-            border-radius: 999px;
-            overflow: hidden;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.04);
-            margin-top: 6px;
-        }
-        
-        .bar>div {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, rgba(106, 169, 255, 0.95), rgba(56, 217, 150, 0.95));
-        }
-        
-        .pct {
-            font-family: var(--mono);
-            font-size: 12px;
-            color: var(--muted);
-            text-align: right;
-        }
-        
-        .gridTop {
-            padding: 14px;
-            border-bottom: 1px solid var(--line);
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        
-        .gridTitle {
-            font-size: 13px;
-            color: var(--muted);
-        }
-        
-        .grid {
-            padding: 12px;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-            gap: 12px;
-            overflow: visible;
-        }
-        
-        .tile {
-            border: 1px solid var(--line);
-            border-radius: var(--r2);
-            background: rgba(255, 255, 255, 0.02);
-            overflow: hidden;
-            cursor: pointer;
-            transition: transform 0.08s ease, border-color 0.15s ease, background 0.15s ease;
-        }
-        
-        .tile:hover {
-            transform: translateY(-1px);
-            border-color: rgba(106, 169, 255, 0.22);
-            background: rgba(255, 255, 255, 0.04);
-        }
-        
-        .tile.active {
-            border-color: rgba(106, 169, 255, 0.4);
-            background: rgba(106, 169, 255, 0.1);
-        }
-        
-        .tileImg {
-            width: 100%;
-            height: 140px;
-            object-fit: cover;
-            display: block;
-            background: rgba(255, 255, 255, 0.02);
-            cursor: zoom-in;
-        }
-        
-        .tileBody {
-            padding: 10px;
-        }
-        
-        .tileName {
-            font-family: var(--mono);
-            font-size: 12px;
-            line-height: 1.3;
-            word-break: break-all;
-        }
-        
-        .badges {
-            margin-top: 8px;
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-        }
-        
-        .badge {
-            font-size: 11px;
-            padding: 2px 8px;
-            border-radius: 999px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.03);
-            color: var(--muted);
-        }
-        
-        .badge.pred {
-            border-color: rgba(106, 169, 255, 0.24);
-            background: rgba(106, 169, 255, 0.08);
-            color: var(--accent);
-        }
-        
-        .badge.manual {
-            border-color: rgba(56, 217, 150, 0.24);
-            background: rgba(56, 217, 150, 0.08);
-            color: var(--good);
-        }
-        
-        .badge.changed {
-            border-color: rgba(255, 204, 102, 0.25);
-            background: rgba(255, 204, 102, 0.08);
-            color: var(--warn);
-        }
-        
-        .modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.68);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            padding: 22px;
-        }
-        
-        .modal.open {
-            display: flex;
-        }
-        
-        .modal .inner {
-            width: min(1400px, 100%);
-            height: min(900px, 100%);
-            border-radius: 22px;
-            border: 1px solid rgba(255, 255, 255, 0.16);
-            background: rgba(10, 14, 20, 0.78);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            cursor: zoom-out;
-        }
-        
-        .modal .close {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            padding: 8px 10px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            background: rgba(255, 255, 255, 0.06);
-            color: var(--text);
-            cursor: pointer;
-            font-size: 12px;
-        }
-        
-        table.tbl {
-            width: 100%;
-            border-collapse: collapse;
-            border: 1px solid var(--line);
-            border-radius: 14px;
-            overflow: hidden;
-            background: rgba(255, 255, 255, 0.02);
-        }
-        
-        .tbl th,
-        .tbl td {
-            border-bottom: 1px solid var(--line);
-            padding: 10px 10px;
-            vertical-align: top;
-            font-size: 12px;
-        }
-        
-        .tbl th {
-            position: sticky;
-            top: 0;
-            background: rgba(255, 255, 255, 0.04);
-            color: var(--muted);
-            text-align: left;
-            cursor: pointer;
-            user-select: none;
-            z-index: 5;
-        }
-        
-        .tbl tr:hover td {
-            background: rgba(255, 255, 255, 0.03);
-        }
-        
-        .mono {
-            font-family: var(--mono);
-        }
-        
-        .small {
-            font-size: 12px;
-            color: var(--muted);
-        }
-        
-        .hl {
-            background: rgba(255, 204, 102, 0.2);
-            border: 1px solid rgba(255, 204, 102, 0.3);
-            border-radius: 6px;
-            padding: 1px 4px;
-        }
-        
-        .jsonlLayout {
-            padding: 14px;
-            display: grid;
-            grid-template-columns: 1fr 420px;
-            gap: 14px;
-            align-items: start;
-        }
-        
-        @media (max-width: 980px) {
-            .jsonlLayout {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .scrollBox {
-            max-height: 70vh;
-            overflow: auto;
-            border-radius: 14px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.02);
-        }
-        
-        pre.code {
-            margin: 0;
-            padding: 10px;
-            white-space: pre-wrap;
-            word-break: break-word;
-            font-family: var(--mono);
-            font-size: 12px;
-            line-height: 1.4;
-            color: var(--text);
-        }
-        #thumbsCard {
-        max-height: 42vh;
-        overflow: auto;
-        }       
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
+    .modal.open { display: flex; }
+    .modalInner { max-width: 95vw; max-height: 95vh; position: relative; }
+    .modalInner img { max-width: 95vw; max-height: 95vh; display: block; border-radius: 16px; }
+    .modalClose { position: absolute; top: 10px; right: 10px; }
+    @media (max-width: 1400px) {
+      .grid2, .jsonlLayout { grid-template-columns: 1fr; }
+      .kv { grid-template-columns: 92px minmax(0, 1fr); }
+    }
 
-        #grid {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-}
-    </style>
+    @media (max-width: 1100px) { .grid2, .jsonlLayout { grid-template-columns: 1fr; } }
+  </style>
 </head>
-
 <body>
-    <div class="app">
-        <div class="card">
-            <div class="top">
-                <h1>WebHound report</h1>
-                <div class="meta">
-                    <div>Images: <code>{IMAGES_DIR}</code></div>
-                    <div style="margin-top: 6px">
-                        Predictions: <a href="./{CSV_NAME}">{CSV_NAME}</a> · Annotations:
-                        <a href="./annotations.csv">annotations.csv</a>
-                    </div>
-                </div>
+  <div class="wrap">
+    <div class="card topbar">
+      <div class="title">WebHound report</div>
+      <div class="meta" id="reportMeta">DB-backed report</div>
+      <div class="links small">
+        <a href="./predictions.csv" target="_blank" rel="noopener">predictions.csv</a>
+        <a href="./annotations.csv" target="_blank" rel="noopener">annotations.csv</a>
+      </div>
+      <div class="tabs">
+        <button class="tabBtn active" data-tab="screens">Screens</button>
+        <button class="tabBtn" data-tab="jsonl">Findings</button>
+      </div>
+    </div>
 
-                <div class="tabs">
-                    <button class="tabBtn active" data-tab="screens">Screens</button>
-                    <button class="tabBtn" data-tab="jsonl">JSONL</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="tabPane active" id="tab-screens">
-            <div class="card" id="viewerCard">
-                <div class="top">
-                    <div class="controls">
-                        <input id="search" class="row" type="text" placeholder="Search filename…" />
-                        <select id="filterManual">
-              <option value="">manual contains: (all)</option>
+    <div class="pane active" id="pane-screens">
+      <div class="card sectionCard">
+        <div class="controls">
+          <div class="row">
+            <input id="screenSearch" type="text" placeholder="Search filename / page URL..." />
+            <select id="manualFilter" style="max-width: 280px;">
+              <option value="">manual: (all)</option>
+              <option value="__none__">manual: none</option>
             </select>
-                        <select id="filterPred">
+            <select id="predFilter" style="max-width: 280px;">
               <option value="">pred: (all)</option>
+              <option value="__none__">pred: none</option>
             </select>
-
-                        <div class="row">
-                            <button id="btnPrev" class="btn-ghost">← Prev</button>
-                            <button id="btnNext" class="btn-ghost">Next →</button>
-                            <button id="btnSave" class="btn-good">Save</button>
-                            <button id="btnDownload" class="btn-ghost">Download</button>
-                            <button id="btnSetPred" class="btn-ghost">
-                manual = {pred}
-              </button>
-                            <button id="btnClear" class="btn-danger">Clear</button>
-                        </div>
-
-                        <div class="pillrow">
-                            <span class="pill" id="countPill">0/0</span>
-                            <span class="pill" id="shownPill">shown: 0/0</span>
-                            <span class="pill" id="changedPill">changed: 0</span>
-                            <span class="pill warn">
-                keys: <span class="kbd">←</span><span class="kbd">→</span>
-                            <span class="kbd">1..9</span> (toggle)
-                            <span class="kbd">0</span> clear
-                            <span class="kbd">S</span> save
-                            <span class="kbd">Esc</span>
-                            </span>
-                            <span class="pill good" id="savedPill" style="display: none">saved</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="head">
-                    <div class="fileInfo" id="fileInfo"></div>
-                </div>
-
-                <div class="viewer">
-                    <div class="imgWrap">
-                        <img id="bigimg" class="bigimg" alt="preview" />
-                        <div class="imgHint">Click to zoom</div>
-                    </div>
-
-                    <div>
-                        <div class="section">
-                            <h3>Labels (multi)</h3>
-                            <div class="kv" style="margin-bottom: 10px">
-                                <div class="k">Pred</div>
-                                <div class="v" id="predLabel"></div>
-
-                                <div class="k">Prob</div>
-                                <div class="v" id="predProb"></div>
-                            </div>
-
-                            <div class="manualChecks" id="manualChecks"></div>
-                        </div>
-
-                        <div class="section">
-                            <h3>All probabilities</h3>
-                            <div class="probs" id="probs"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card" id="thumbsCard">
-                <div class="gridTop">
-                    <div class="gridTitle">
-                        Thumbnails (click to select · click image to zoom)
-                    </div>
-                    <div class="pill">auto-scroll only if grid visible</div>
-                </div>
-                <div class="grid" id="grid"></div>
-            </div>
+          </div>
+          <div class="row">
+            <button class="btn" id="prevBtn">← Prev</button>
+            <button class="btn" id="nextBtn">Next →</button>
+            <button class="btn btn-good" id="saveBtn">Save</button>
+            <button class="btn" id="downloadBtn">Download</button>
+            <button class="btn" id="copyPredBtn">manual = {pred}</button>
+            <button class="btn btn-danger" id="clearManualBtn">Clear</button>
+          </div>
+          <div class="pillrow">
+            <span class="pill" id="navPill">0/0</span>
+            <span class="pill" id="shownPill">shown: 0/0</span>
+            <span class="pill" id="changedPill">changed: 0</span>
+            <span class="pill warn" id="screenStatus">loading…</span>
+          </div>
+          <div class="mono small" id="currentFile">-</div>
         </div>
+      </div>
 
-        <div class="tabPane" id="tab-jsonl">
-            <div class="card" id="jsonlCard">
-                <div class="top">
-                    <h1 style="margin-bottom: 6px">JSONL findings</h1>
-                    <div class="meta">
-                        Читает NDJSON/JSONL через <code>/api/jsonl?file=...</code> и сортирует по <code>rule_name</code>.
-                    </div>
-
-                    <div class="controls">
-                        <input id="jsonlPath" class="row" type="text" placeholder="Path to jsonl (e.g. ../../sensitive_info.post.jsonl)" />
-                        <select id="jsonlFilterRule">
-              <option value="">rule_name: (all)</option>
-            </select>
-                        <select id="jsonlFilterLabel">
-              <option value="">label: (all)</option>
-            </select>
-
-                        <div class="row">
-                            <button id="jsonlLoad" class="btn-good">Load</button>
-                            <button id="jsonlClear" class="btn-danger">Clear</button>
-                            <input id="jsonlSearch" type="text" placeholder="Search value/path/text…" style="flex: 1; min-width: 240px" />
-                        </div>
-
-                        <div class="pillrow">
-                            <span class="pill" id="jsonlCountPill">0</span>
-                            <span class="pill" id="jsonlShownPill">shown: 0</span>
-                            <span class="pill warn" id="jsonlStatusPill">idle</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="jsonlLayout">
-                    <div class="scrollBox">
-                        <table class="tbl" id="jsonlTable">
-                            <thead>
-                                <tr>
-                                    <th data-col="rule_name">rule_name</th>
-                                    <th data-col="label">label</th>
-                                    <th data-col="ml_pred_label">ml_pred_label</th>
-                                    <th data-col="ml_pred_score">ml_pred_score</th>
-                                    <th data-col="value">value</th>
-                                    <th data-col="path">path</th>
-                                    <th data-col="line">line</th>
-                                </tr>
-                            </thead>
-                            <tbody id="jsonlTbody"></tbody>
-                        </table>
-                    </div>
-
-                    <div>
-                        <div class="section">
-                            <h3>Selected</h3>
-                            <div class="kv">
-                                <div class="k">Label</div>
-                                <div class="v" id="jsonlSelLabel">-</div>
-
-                                <div class="k">ML pred</div>
-                                <div class="v" id="jsonlSelMlPred">-</div>
-
-                                <div class="k">ML score</div>
-                                <div class="v" id="jsonlSelMlScore">-</div>
-
-                                <div class="k">Value</div>
-                                <div class="v" id="jsonlSelValue">-</div>
-
-                                <div class="k">Rule</div>
-                                <div class="v" id="jsonlSelRule">-</div>
-
-                                <div class="k">Path</div>
-                                <div class="v" id="jsonlSelPath">-</div>
-
-                                <div class="k">Line</div>
-                                <div class="v" id="jsonlSelLine">-</div>
-                            </div>
-
-                            <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
-                                <button id="jsonlOpenPath" class="btn-ghost">Open (if possible)</button>
-                                <button id="jsonlCopyValue" class="btn-ghost">Copy value</button>
-                                <button id="jsonlCopyPath" class="btn-ghost">Copy path</button>
-                            </div>
-                        </div>
-
-                        <div class="section">
-                            <h3>Text (highlight span)</h3>
-                            <pre class="code" id="jsonlSelText">(select a row)</pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
+      <div class="grid2">
+        <div class="card sectionCard">
+          <div class="previewWrap" id="previewWrap">
+            <div class="previewPlaceholder">preview</div>
+          </div>
         </div>
+        <div class="card sectionCard">
+          <div class="kv">
+            <div class="k">File</div><div class="v mono" id="fileVal">-</div>
+            <div class="k">Page URL</div><div class="v" id="urlVal">-</div>
+            <div class="k">Pred</div><div class="v" id="predVal">-</div>
+            <div class="k">Prob</div><div class="v" id="probVal">-</div>
+            <div class="k">Manual</div><div class="v" id="manualVal">-</div>
+            <div class="k">Run</div><div class="v" id="runVal">-</div>
+          </div>
+
+          <div style="margin-top: 16px;">
+            <div class="muted" style="margin-bottom:8px;">Labels (single)</div>
+            <div class="manualGrid" id="manualChecks"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card sectionCard" style="margin-top:12px;">
+        <div class="thumbsHead">
+          <div>Thumbnails</div>
+          <div class="small muted">click card to select · click preview to zoom</div>
+        </div>
+        <div class="thumbs" id="thumbs"></div>
+      </div>
     </div>
 
-    <div class="modal" id="modal">
-        <div class="inner">
-            <button class="close" id="modalClose">Esc / click image</button>
-            <img id="modalImg" alt="zoomed" />
+    <div class="pane" id="pane-jsonl">
+      <div class="card sectionCard">
+        <div style="font-size:28px;font-weight:800;margin-bottom:4px;">Findings</div>
+        <div class="meta">Читает SQLite через <code>/api/db/raw_findings?run_id=...</code> и <code>/api/db/analysis_findings?run_id=...</code>.</div>
+        <div class="controls" style="margin-top:12px;">
+          <div class="row">
+            <select id="findingSource" style="max-width: 260px;">
+              <option value="analysis">analysis</option>
+              <option value="raw" selected>raw</option>
+            </select>
+            <input id="findingRunId" type="text" placeholder="run_id (blank = auto)" style="max-width: 220px;" />
+            <button class="btn btn-good" id="findingLoad">Load</button>
+            <button class="btn btn-danger" id="findingClear">Clear</button>
+          </div>
+          <div class="row">
+            <select id="findingRule"><option value="">rule/type: (all)</option></select>
+            <select id="findingLabel"><option value="">label/stage: (all)</option></select>
+            <input id="findingSearch" type="text" placeholder="Search value/path/text..." />
+          </div>
+          <div class="pillrow">
+            <span class="pill" id="findingCount">0</span>
+            <span class="pill" id="findingShown">shown: 0</span>
+            <span class="pill warn" id="findingStatus">idle</span>
+            <span class="pill" id="findingResolvedRun">run: -</span>
+          </div>
         </div>
+      </div>
+
+      <div class="jsonlLayout">
+        <div class="card sectionCard">
+          <div class="tblWrap">
+            <table id="findingTable">
+              <thead>
+                <tr>
+                  <th data-col="rule_name">rule/type</th>
+                  <th data-col="label">label/stage</th>
+                  <th data-col="ml_pred_label">ml/final</th>
+                  <th data-col="ml_pred_score">score</th>
+                  <th data-col="value">value</th>
+                  <th data-col="path">path</th>
+                  <th data-col="line">line</th>
+                </tr>
+              </thead>
+              <tbody id="findingBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="card sectionCard">
+            <div style="font-size:18px;font-weight:700;margin-bottom:10px;">Selected</div>
+            <div class="kv">
+              <div class="k">Label</div><div class="v" id="selLabel">-</div>
+              <div class="k">ML/final</div><div class="v" id="selMlPred">-</div>
+              <div class="k">Score</div><div class="v" id="selMlScore">-</div>
+              <div class="k">Value</div><div class="v" id="selValue">-</div>
+              <div class="k">Rule</div><div class="v" id="selRule">-</div>
+              <div class="k">Path</div><div class="v" id="selPath">-</div>
+              <div class="k">Line</div><div class="v" id="selLine">-</div>
+            </div>
+            <div class="row" style="margin-top: 12px;">
+              <button class="btn" id="openPathBtn">Open</button>
+              <button class="btn" id="copyValueBtn">Copy value</button>
+              <button class="btn" id="copyPathBtn">Copy path</button>
+            </div>
+          </div>
+          <div class="card sectionCard" style="margin-top:12px;">
+            <div style="font-size:18px;font-weight:700;margin-bottom:10px;">Context</div>
+            <pre class="code" id="selText">(select a row)</pre>
+          </div>
+        </div>
+      </div>
     </div>
-<script>
-  function setTab(name) {
-    document.querySelectorAll(".tabBtn").forEach((b) => {
-      b.classList.toggle("active", b.dataset.tab === name);
-    });
-    document.getElementById("tab-screens").classList.toggle("active", name === "screens");
-    document.getElementById("tab-jsonl").classList.toggle("active", name === "jsonl");
-    localStorage.setItem("wh_tab", name);
-  }
+  </div>
 
-  document.querySelectorAll(".tabBtn").forEach((b) => {
-    b.addEventListener("click", () => setTab(b.dataset.tab));
-  });
+  <div class="modal" id="modal">
+    <div class="modalInner">
+      <button class="btn modalClose" id="modalClose">Close</button>
+      <img id="modalImg" alt="zoomed" />
+    </div>
+  </div>
 
-  setTab(localStorage.getItem("wh_tab") || "screens");
+  <script>
+    const MANUAL_LABELS = ["custom404", "oldlooking", "parked", "webapp"];
 
-  function csvEsc(v) {
-    const s = String(v ?? "");
-    if (/[,"\r\n]/.test(s)) return `"${s.replaceAll('"', '""')}"`;
-    return s;
-  }
-
-  function parseCsvLine(line) {
-    const out = [];
-    let cur = "";
-    let inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (inQ) {
-        if (ch === '"' && line[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else if (ch === '"') {
-          inQ = false;
-        } else {
-          cur += ch;
-        }
-      } else {
-        if (ch === '"') {
-          inQ = true;
-        } else if (ch === ",") {
-          out.push(cur);
-          cur = "";
-        } else {
-          cur += ch;
-        }
-      }
+    function qs(id) { return document.getElementById(id); }
+    function shortPath(s) {
+      s = String(s || "");
+      if (s.length <= 84) return s;
+      return s.slice(0, 34) + "…" + s.slice(-46);
     }
-    out.push(cur);
-    return out;
-  }
-
-  function isAbsFsPath(file) {
-    return typeof file === "string" && (file.startsWith("/") || file.startsWith("file://"));
-  }
-
-  function normalizeAbsPath(file) {
-    if (!file) return "";
-    let s = String(file);
-    if (s.startsWith("file://")) s = s.slice("file://".length);
-    return s;
-  }
-
-  const IMG_SRC_CACHE = new Map();
-
-  async function resolveImageSrc(file) {
-    if (!file) return "";
-    if (IMG_SRC_CACHE.has(file)) return IMG_SRC_CACHE.get(file);
-
-    let result = "";
-    if (!isAbsFsPath(file)) {
-      const s = file.startsWith("./") ? file : `./${file}`;
-      result = encodeURI(s);
-    } else {
-      const abs = normalizeAbsPath(file);
-      try {
-        const r = await fetch(`/api/relpath?abs=${encodeURIComponent(abs)}`);
-        if (r.ok) {
-          const j = await r.json();
-          if (j && j.ok && j.rel) {
-            result = encodeURI(j.rel);
-          }
-        }
-      } catch (_) {}
-
-      if (!result) result = encodeURI(abs);
+    function escHtml(s) {
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+    function csvEsc(v) {
+      const s = String(v ?? "");
+      return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+    }
+    async function fetchJson(url) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
     }
 
-    IMG_SRC_CACHE.set(file, result);
-    return result;
-  }
+    const IMG_SRC_CACHE = new Map();
+    async function resolveImageSrc(file) {
+      if (!file) return "";
+      if (IMG_SRC_CACHE.has(file)) return IMG_SRC_CACHE.get(file);
 
-  async function fetchTextIfExists(name) {
-    const r = await fetch(name);
-    if (!r.ok) return null;
-    return await r.text();
-  }
+      const candidates = [];
+      const push = (v) => { if (v && !candidates.includes(v)) candidates.push(v); };
 
-  const STATE = {
-    rows: [],
-    labels: [],
-    filteredIdx: [],
-    activeIdx: 0,
-  };
+      push(file);
 
-  function showSaved(msg) {
-    const el = document.getElementById("savedPill");
-    el.textContent = msg || "saved";
-    el.style.display = "inline-block";
-    setTimeout(() => {
-      el.style.display = "none";
-    }, 1200);
-  }
+      const parts = String(file).split('/');
+      const base = parts[parts.length - 1] || "";
+      const dir = parts.slice(0, -1).join('/');
 
-  function buildAnnotationsCsv() {
-    const lines = [];
-    lines.push(["file", "user_label"].map(csvEsc).join(","));
+      // 1) original absolute path from DB
+      if (file.startsWith("/")) push(file);
 
-    const rows = [...STATE.rows].sort((a, b) =>
-      String(a.file).localeCompare(String(b.file)),
-    );
-
-    for (const r of rows) {
-      const set = r.manual_set || new Set();
-      const manual = [...set].sort().join("+");
-      lines.push([r.file, manual].map(csvEsc).join(","));
-    }
-
-    return lines.join("\n") + "\n";
-  }
-
-  async function saveToServer() {
-    const r = STATE.rows[STATE.activeIdx];
-    if (!r) return;
-
-    const label = [...(r.manual_set || [])][0] || "";
-
-    const resp = await fetch(`/api/db/screenshots/${r.id}/label`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_label: label,
-        local_path: r.file,
-        updated_by: "ui"
-      })
-    });
-
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    showSaved("saved");
-  }
-
-  function downloadCsv() {
-    const csv = buildAnnotationsCsv();
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "annotations.csv";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    showSaved("downloaded");
-  }
-
-  async function openZoomByFile(file) {
-    const modal = document.getElementById("modal");
-    const img = document.getElementById("modalImg");
-    img.removeAttribute("src");
-    modal.classList.add("open");
-    img.src = await resolveImageSrc(file);
-  }
-
-  function closeZoom() {
-    document.getElementById("modal").classList.remove("open");
-  }
-
-  function rowHasManualLabel(r, label) {
-    const set = r.manual_set || new Set();
-    return set.has(label);
-  }
-
-  function isElementVisible(el, minVisiblePx = 80) {
-    if (!el) return false;
-    const r = el.getBoundingClientRect();
-    const vh = window.innerHeight || document.documentElement.clientHeight;
-    const visible = Math.min(r.bottom, vh) - Math.max(r.top, 0);
-    return visible >= minVisiblePx;
-  }
-
-  function applyFilters() {
-    const q = document.getElementById("search").value.trim().toLowerCase();
-    const fMan = document.getElementById("filterManual").value;
-    const fPred = document.getElementById("filterPred").value;
-
-    const idx = [];
-    for (let i = 0; i < STATE.rows.length; i++) {
-      const r = STATE.rows[i];
-      if (q && !String(r.file).toLowerCase().includes(q)) continue;
-      if (fPred && String(r.top_label || "") !== fPred) continue;
-      if (fMan && !rowHasManualLabel(r, fMan)) continue;
-      idx.push(i);
-    }
-
-    STATE.filteredIdx = idx;
-    if (!idx.includes(STATE.activeIdx)) {
-      STATE.activeIdx = idx.length ? idx[0] : 0;
-    }
-    renderAll();
-  }
-
-  function renderStats() {
-    const totalAll = STATE.rows.length;
-    const shown = STATE.filteredIdx.length;
-    const pos = shown ? STATE.filteredIdx.indexOf(STATE.activeIdx) + 1 : 0;
-
-    document.getElementById("countPill").textContent = `${pos}/${shown}`;
-    document.getElementById("shownPill").textContent = `shown: ${shown}/${totalAll}`;
-
-    let changed = 0;
-    for (const r of STATE.rows) {
-      const set = r.manual_set || new Set();
-      const pred = r.top_label || "";
-      const isSame =
-        (pred === "" && set.size === 0) ||
-        (pred !== "" && set.size === 1 && set.has(pred));
-      if (!isSame) changed++;
-    }
-    document.getElementById("changedPill").textContent = `changed: ${changed}`;
-  }
-
-  let BIG_RENDER_TOKEN = 0;
-
-  function renderViewer() {
-    const r = STATE.rows[STATE.activeIdx];
-    const fileInfo = document.getElementById("fileInfo");
-    const big = document.getElementById("bigimg");
-
-    if (!r) {
-      fileInfo.textContent = "(no items)";
-      big.removeAttribute("src");
-      document.getElementById("predLabel").textContent = "";
-      document.getElementById("predProb").textContent = "";
-      document.getElementById("manualChecks").innerHTML = "";
-      document.getElementById("probs").innerHTML = "";
-      return;
-    }
-
-    fileInfo.textContent = r.file;
-    big.removeAttribute("src");
-
-    const token = ++BIG_RENDER_TOKEN;
-    resolveImageSrc(r.file).then((src) => {
-      if (token === BIG_RENDER_TOKEN && STATE.rows[STATE.activeIdx] === r) {
-        big.src = src;
-      }
-    });
-
-    document.getElementById("predLabel").textContent = String(r.top_label || "");
-    document.getElementById("predProb").textContent = Number(r.top_prob || 0).toFixed(4);
-
-    const wrap = document.getElementById("manualChecks");
-    wrap.innerHTML = "";
-    if (!r.manual_set) r.manual_set = new Set();
-
-    for (const lbl of STATE.labels) {
-      const lab = document.createElement("label");
-      lab.className = "chk";
-
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = r.manual_set.has(lbl);
-
-      cb.onchange = () => {
-        if (cb.checked) r.manual_set.add(lbl);
-        else r.manual_set.delete(lbl);
-        renderAll(false);
-      };
-
-      const txt = document.createElement("span");
-      txt.textContent = lbl;
-
-      lab.appendChild(cb);
-      lab.appendChild(txt);
-      wrap.appendChild(lab);
-    }
-
-    const probsEl = document.getElementById("probs");
-    probsEl.innerHTML = "";
-    const frag = document.createDocumentFragment();
-
-    for (const p of r.probs) {
-      const row = document.createElement("div");
-      row.className = "barrow";
-
-      const left = document.createElement("div");
-      const lbl = document.createElement("div");
-      lbl.className = "lbl";
-      lbl.textContent = p.label;
-
-      const bar = document.createElement("div");
-      bar.className = "bar";
-      const fill = document.createElement("div");
-      fill.style.width = `${Math.max(0, Math.min(1, p.value)) * 100}%`;
-      bar.appendChild(fill);
-
-      left.appendChild(lbl);
-      left.appendChild(bar);
-
-      const pct = document.createElement("div");
-      pct.className = "pct";
-      pct.textContent = p.value.toFixed(4);
-
-      row.appendChild(left);
-      row.appendChild(pct);
-      frag.appendChild(row);
-    }
-
-    probsEl.appendChild(frag);
-  }
-
-  const IMG_OBSERVER = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (!entry.isIntersecting) continue;
-
-      const img = entry.target;
-      const file = img.dataset.file || "";
-      if (!file) {
-        IMG_OBSERVER.unobserve(img);
-        continue;
+      // 2) guessed real screenshot path: <project>/screenshots/<basename>
+      if (dir && base && !/\/screenshots\//.test(file)) {
+        push(`${dir}/screenshots/${base}`);
       }
 
-      resolveImageSrc(file).then((src) => {
-        if (!img.getAttribute("src")) {
-          img.src = src;
-        }
-      });
-
-      IMG_OBSERVER.unobserve(img);
-    }
-  }, {
-    root: null,
-    rootMargin: "300px 0px",
-    threshold: 0.01
-  });
-
-  function renderGrid() {
-    const el = document.getElementById("grid");
-    el.innerHTML = "";
-    const frag = document.createDocumentFragment();
-
-    for (const i of STATE.filteredIdx) {
-      const r = STATE.rows[i];
-
-      const tile = document.createElement("div");
-      tile.className = "tile" + (i === STATE.activeIdx ? " active" : "");
-      tile.onclick = () => {
-        STATE.activeIdx = i;
-        renderAll();
-      };
-
-      const img = document.createElement("img");
-      img.className = "tileImg";
-      img.alt = r.file;
-      img.loading = "lazy";
-      img.dataset.file = r.file;
-      IMG_OBSERVER.observe(img);
-      img.onclick = (ev) => {
-        ev.stopPropagation();
-        openZoomByFile(r.file);
-      };
-
-      tile.appendChild(img);
-
-      const body = document.createElement("div");
-      body.className = "tileBody";
-
-      const name = document.createElement("div");
-      name.className = "tileName";
-      name.textContent = r.file;
-      body.appendChild(name);
-
-      const badges = document.createElement("div");
-      badges.className = "badges";
-
-      const bPred = document.createElement("span");
-      bPred.className = "badge pred";
-      bPred.textContent = `pred: ${r.top_label}`;
-      badges.appendChild(bPred);
-
-      const set = r.manual_set || new Set();
-      const chosen = [...set].sort().join("+") || "(empty)";
-      const bMan = document.createElement("span");
-      bMan.className = "badge manual";
-      bMan.textContent = `manual: ${chosen}`;
-      badges.appendChild(bMan);
-
-      const pred = r.top_label || "";
-      const isSame =
-        (pred === "" && set.size === 0) ||
-        (pred !== "" && set.size === 1 && set.has(pred));
-
-      if (!isSame) {
-        const bCh = document.createElement("span");
-        bCh.className = "badge changed";
-        bCh.textContent = "changed";
-        badges.appendChild(bCh);
+      // 3) direct URL candidates against file roots
+      if (base) {
+        push(base);
+        push(`/${base}`);
+        push(`screenshots/${base}`);
+        push(`/screenshots/${base}`);
       }
 
-      body.appendChild(badges);
-      tile.appendChild(body);
-
-      frag.appendChild(tile);
-    }
-
-    el.appendChild(frag);
-  }
-
-  function renderAll(scrollGrid = true) {
-    renderStats();
-    renderViewer();
-    renderGrid();
-
-    if (scrollGrid) {
-      const thumbs = document.getElementById("thumbsCard");
-      if (isElementVisible(thumbs, 80)) {
-        const grid = document.getElementById("grid");
-        const active = grid && grid.querySelector(".tile.active");
-        if (active) active.scrollIntoView({ block: "nearest" });
-      }
-    }
-  }
-
-  function nextItem(dir) {
-    const idx = STATE.filteredIdx;
-    if (!idx.length) return;
-    const pos = idx.indexOf(STATE.activeIdx);
-    const nextPos = pos === -1 ? 0 : (pos + dir + idx.length) % idx.length;
-    STATE.activeIdx = idx[nextPos];
-    renderAll(false);
-  }
-
-  function setManualPred() {
-    const r = STATE.rows[STATE.activeIdx];
-    if (!r) return;
-    r.manual_set = new Set();
-    const pred = r.top_label || "";
-    if (pred) r.manual_set.add(pred);
-    renderAll(false);
-  }
-
-  function clearLabel() {
-    const r = STATE.rows[STATE.activeIdx];
-    if (!r) return;
-    r.manual_set = new Set();
-    renderAll(false);
-  }
-
-  function toggleLabelByIndex(oneBased) {
-    const r = STATE.rows[STATE.activeIdx];
-    if (!r) return;
-    const i = oneBased - 1;
-    if (i < 0 || i >= STATE.labels.length) return;
-    if (!r.manual_set) r.manual_set = new Set();
-    const lbl = STATE.labels[i];
-    if (r.manual_set.has(lbl)) r.manual_set.delete(lbl);
-    else r.manual_set.add(lbl);
-    renderAll(false);
-  }
-
-  async function initScreens() {
-    const latestResp = await fetch("/api/db/latest_run");
-    if (!latestResp.ok) {
-      console.error("latest run request failed");
-      STATE.rows = [];
-      STATE.filteredIdx = [];
-      STATE.activeIdx = 0;
-      renderAll();
-      return;
-    }
-
-    const latest = await latestResp.json();
-    if (!latest || !latest.id) {
-      STATE.rows = [];
-      STATE.filteredIdx = [];
-      STATE.activeIdx = 0;
-      renderAll();
-      return;
-    }
-
-    const runId = latest.id;
-
-    const resp = await fetch(`/api/db/screenshots?run_id=${encodeURIComponent(runId)}`);
-    if (!resp.ok) {
-      console.error("screenshots request failed");
-      STATE.rows = [];
-      STATE.filteredIdx = [];
-      STATE.activeIdx = 0;
-      renderAll();
-      return;
-    }
-
-    const rows = await resp.json();
-
-    const labelsSet = new Set();
-    const norm = [];
-
-    for (const r of rows) {
-      const topLabel = r.top_label || "";
-      const topProb = Number(r.top_prob) || 0;
-      const userLabel = r.user_label || "";
-
-      if (topLabel) labelsSet.add(topLabel);
-      if (userLabel) labelsSet.add(userLabel);
-
-      const manual_set = new Set();
-      if (userLabel) manual_set.add(userLabel);
-      else if (topLabel) manual_set.add(topLabel);
-
-      norm.push({
-        id: r.id,
-        file: r.file,
-        top_label: topLabel,
-        top_prob: topProb,
-        manual_set,
-        probs: topLabel ? [{ label: topLabel, value: topProb }] : [],
-      });
-    }
-
-    STATE.labels = [...labelsSet].sort();
-    STATE.rows = norm;
-    STATE.filteredIdx = norm.map((_, i) => i);
-    STATE.activeIdx = STATE.filteredIdx.length ? STATE.filteredIdx[0] : 0;
-
-    const filterManual = document.getElementById("filterManual");
-    const filterPred = document.getElementById("filterPred");
-
-    filterManual.innerHTML = `<option value="">manual contains: (all)</option>`;
-    filterPred.innerHTML = `<option value="">pred: (all)</option>`;
-
-    for (const lbl of STATE.labels) {
-      const o1 = document.createElement("option");
-      o1.value = lbl;
-      o1.textContent = lbl;
-      filterManual.appendChild(o1);
-
-      const o2 = document.createElement("option");
-      o2.value = lbl;
-      o2.textContent = lbl;
-      filterPred.appendChild(o2);
-    }
-
-    document.getElementById("search").addEventListener("input", applyFilters);
-    filterManual.addEventListener("change", applyFilters);
-    filterPred.addEventListener("change", applyFilters);
-
-    document.getElementById("btnPrev").onclick = () => nextItem(-1);
-    document.getElementById("btnNext").onclick = () => nextItem(+1);
-    document.getElementById("btnClear").onclick = () => clearLabel();
-    document.getElementById("btnSetPred").onclick = () => setManualPred();
-
-    document.getElementById("btnSave").onclick = async () => {
-      try {
-        await saveToServer();
-      } catch (e) {
-        alert(`Save failed: ${e}`);
-      }
-    };
-
-    document.getElementById("btnDownload").onclick = () => downloadCsv();
-
-    document.getElementById("bigimg").onclick = () => {
-      const r = STATE.rows[STATE.activeIdx];
-      if (r) openZoomByFile(r.file);
-    };
-
-    document.getElementById("modalClose").onclick = closeZoom;
-    document.getElementById("modalImg").onclick = closeZoom;
-    document.getElementById("modal").onclick = (ev) => {
-      if (ev.target.id === "modal") closeZoom();
-    };
-
-    renderAll();
-  }
-
-  const JSONL = {
-    items: [],
-    filtered: [],
-    sort: { col: "rule_name", dir: "asc" },
-    active: null,
-    ruleSet: new Set(),
-    labelSet: new Set(),
-    relCache: new Map(),
-    mlPredSet: new Set(),
-  };
-
-  function setJsonlStatus(s) {
-    const el = document.getElementById("jsonlStatusPill");
-    el.textContent = s;
-  }
-
-  function shortPath(p, maxLen = 80) {
-    const s = String(p || "");
-    if (s.length <= maxLen) return s;
-    return "…" + s.slice(s.length - maxLen);
-  }
-
-  function normalizeJsonlEntry(obj) {
-    let inner = null;
-    if (obj && typeof obj.text === "string") {
-      const t = obj.text.trim();
-      if (t.startsWith("{") && t.endsWith("}")) {
+      // Try converting absolute-ish candidates through /api/relpath
+      for (const cand of candidates) {
+        if (!cand.startsWith("/")) continue;
         try {
-          inner = JSON.parse(t);
-        } catch {}
+          const j = await fetchJson(`/api/relpath?abs=${encodeURIComponent(cand)}`);
+          if (j && j.ok && j.rel) {
+            const out = j.rel.startsWith("/") ? j.rel : `/${j.rel}`;
+            IMG_SRC_CACHE.set(file, out);
+            return out;
+          }
+        } catch (_) {}
       }
-    }
 
-    const src = inner && inner.spans && inner.text ? inner : obj;
-
-    return {
-      path: src.path ?? obj.path ?? "",
-      line: src.line ?? obj.line ?? null,
-      text: src.text ?? "",
-      spans: Array.isArray(src.spans)
-        ? src.spans
-        : Array.isArray(obj.spans)
-          ? obj.spans
-          : [],
-      ml_pred_label: obj.ml_pred_label ?? src.ml_pred_label ?? "",
-      ml_pred_score: obj.ml_pred_score ?? src.ml_pred_score ?? null,
-    };
-  }
-
-  function jsonlApplyFilters() {
-    const fr = document.getElementById("jsonlFilterRule").value;
-    const fl = document.getElementById("jsonlFilterLabel").value;
-    const q = document.getElementById("jsonlSearch").value.trim().toLowerCase();
-
-    let arr = JSONL.items;
-    if (fr) arr = arr.filter((x) => x.rule_name === fr);
-    if (fl) arr = arr.filter((x) => x.label === fl);
-    if (q) {
-      arr = arr.filter(
-        (x) =>
-          String(x.value).toLowerCase().includes(q) ||
-          String(x.path).toLowerCase().includes(q) ||
-          String(x.text).toLowerCase().includes(q) ||
-          String(x.ml_pred_label).toLowerCase().includes(q),
-      );
-    }
-
-    const { col, dir } = JSONL.sort;
-    arr = [...arr].sort((a, b) => {
-      let av = a[col], bv = b[col];
-      if (
-        col === "line" ||
-        col === "entropy_h" ||
-        col === "entropy_total_bits" ||
-        col === "ml_pred_score"
-      ) {
-        av = Number(av) || 0;
-        bv = Number(bv) || 0;
-        return dir === "asc" ? av - bv : bv - av;
+      // Direct URL probes in order most likely to work with WebHound file roots
+      const direct = [];
+      if (base) {
+        direct.push(`/${base}`);              // when screenshots dir itself is a file root
+        direct.push(`/screenshots/${base}`);  // when project root is the main file root
       }
-      return dir === "asc"
-        ? String(av).localeCompare(String(bv))
-        : String(bv).localeCompare(String(av));
-    });
 
-    JSONL.filtered = arr;
-    document.getElementById("jsonlCountPill").textContent = `${JSONL.items.length}`;
-    document.getElementById("jsonlShownPill").textContent = `shown: ${JSONL.filtered.length}`;
-
-    jsonlRenderTable();
-    if (!JSONL.active && JSONL.filtered.length) {
-      JSONL.active = JSONL.filtered[0];
-    }
-    jsonlRenderSelected();
-  }
-
-  function jsonlRenderTable() {
-    const tb = document.getElementById("jsonlTbody");
-    tb.innerHTML = "";
-
-    const frag = document.createDocumentFragment();
-    const maxRows = Math.min(JSONL.filtered.length, 2000);
-    for (let i = 0; i < maxRows; i++) {
-      const it = JSONL.filtered[i];
-      const tr = document.createElement("tr");
-      tr.style.cursor = "pointer";
-      if (JSONL.active && JSONL.active.__id === it.__id) {
-        tr.style.background = "rgba(106,169,255,0.10)";
+      for (const url of direct) {
+        try {
+          const resp = await fetch(url, { method: "HEAD" });
+          if (resp.ok) {
+            IMG_SRC_CACHE.set(file, url);
+            return url;
+          }
+        } catch (_) {}
       }
-      tr.onclick = () => {
-        JSONL.active = it;
-        jsonlRenderSelected();
-        jsonlRenderTable();
-      };
 
-      const mlScore =
-        typeof it.ml_pred_score === "number"
-          ? Number(it.ml_pred_score).toFixed(4)
-          : "";
-
-      tr.innerHTML = `
-        <td>${it.rule_name}</td>
-        <td class="mono">${it.label}</td>
-        <td class="mono">${it.ml_pred_label || ""}</td>
-        <td class="mono">${mlScore}</td>
-        <td class="mono">${it.value}</td>
-        <td class="mono">${shortPath(it.path)}</td>
-        <td class="mono">${it.line ?? ""}</td>
-      `;
-      frag.appendChild(tr);
+      let out = "";
+      if (/^(?:https?:)?\/\//.test(file)) out = file;
+      else out = file.startsWith("/") ? file : `/${file.replace(/^\.\//, "")}`;
+      IMG_SRC_CACHE.set(file, out);
+      return out;
     }
 
-    tb.appendChild(frag);
-  }
-
-  function highlightText(text, start, end) {
-    const s = String(text || "");
-    if (typeof start !== "number" || typeof end !== "number") return s;
-    if (start < 0 || end > s.length || end <= start) return s;
-    const a = s.slice(0, start);
-    const b = s.slice(start, end);
-    const c = s.slice(end);
-    return `${a}<span class="hl">${b}</span>${c}`;
-  }
-
-  async function getRelForAbs(absPath) {
-    if (!absPath) return null;
-    if (JSONL.relCache.has(absPath)) return JSONL.relCache.get(absPath);
-
-    const r = await fetch(`/api/jsonl?file=${encodeURIComponent(absPath)}`);
-    if (!r.ok) {
-      const rr = await fetch(`/api/relpath?abs=${encodeURIComponent(absPath)}`);
-      if (!rr.ok) {
-        JSONL.relCache.set(absPath, null);
-        return null;
-      }
-      let j2 = null;
-      try { j2 = await rr.json(); } catch {}
-      const rel2 = j2 && j2.ok && j2.rel ? j2.rel : null;
-      JSONL.relCache.set(absPath, rel2);
-      return rel2;
+    function setTab(name) {
+      document.querySelectorAll('.tabBtn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+      qs('pane-screens').classList.toggle('active', name === 'screens');
+      qs('pane-jsonl').classList.toggle('active', name === 'jsonl');
+      localStorage.setItem('wh_tab', name);
     }
+    document.querySelectorAll('.tabBtn').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+    setTab(localStorage.getItem('wh_tab') || 'screens');
 
-    JSONL.relCache.set(absPath, absPath);
-    return absPath;
-  }
-
-  function jsonlRenderSelected() {
-    const it = JSONL.active;
-    const elLabel = document.getElementById("jsonlSelLabel");
-    const elMlPred = document.getElementById("jsonlSelMlPred");
-    const elMlScore = document.getElementById("jsonlSelMlScore");
-    const elValue = document.getElementById("jsonlSelValue");
-    const elRule = document.getElementById("jsonlSelRule");
-    const elPath = document.getElementById("jsonlSelPath");
-    const elLine = document.getElementById("jsonlSelLine");
-    const elText = document.getElementById("jsonlSelText");
-
-    if (!it) {
-      elLabel.textContent = "-";
-      elMlPred.textContent = "-";
-      elMlScore.textContent = "-";
-      elValue.textContent = "-";
-      elRule.textContent = "-";
-      elPath.textContent = "-";
-      elLine.textContent = "-";
-      elText.textContent = "(select a row)";
-      return;
-    }
-
-    elLabel.textContent = it.label || "-";
-    elMlPred.textContent = it.ml_pred_label || "-";
-    elMlScore.textContent =
-      typeof it.ml_pred_score === "number"
-        ? Number(it.ml_pred_score).toFixed(4)
-        : "-";
-    elValue.textContent = it.value || "-";
-    elRule.textContent = it.rule_name || "-";
-    elPath.textContent = it.path || "-";
-    elLine.textContent = it.line ?? "-";
-
-    const html = highlightText(it.text, it.start, it.end);
-    elText.innerHTML = html;
-
-    document.getElementById("jsonlCopyValue").onclick = async () => {
-      try {
-        await navigator.clipboard.writeText(String(it.value || ""));
-      } catch {
-        alert("Copy failed");
-      }
+    const Screens = {
+      runId: null,
+      rows: [],
+      filtered: [],
+      idx: 0,
+      changed: new Map(),
     };
 
-    document.getElementById("jsonlCopyPath").onclick = async () => {
-      try {
-        await navigator.clipboard.writeText(String(it.path || ""));
-      } catch {
-        alert("Copy failed");
-      }
-    };
+    function manualValue(row) {
+      if (!row) return "";
+      return Screens.changed.has(row.id) ? Screens.changed.get(row.id) : (row.user_label || "");
+    }
 
-    document.getElementById("jsonlOpenPath").onclick = async () => {
-      const abs = String(it.path || "");
-      if (!abs) return;
-      const rel = await getRelForAbs(abs);
-      if (rel) {
-        window.open(encodeURI(rel), "_blank", "noopener");
+    function setScreenStatus(msg, cls) {
+      const el = qs('screenStatus');
+      el.textContent = msg;
+      el.className = `pill ${cls || 'warn'}`;
+    }
+
+    function buildManualChecks(value) {
+      const wrap = qs('manualChecks');
+      wrap.innerHTML = '';
+      for (const label of MANUAL_LABELS) {
+        const div = document.createElement('label');
+        div.className = 'check';
+        const checked = value === label ? 'checked' : '';
+        div.innerHTML = `<input type="radio" name="manualLabel" value="${escHtml(label)}" ${checked}><span>${escHtml(label)}</span>`;
+        wrap.appendChild(div);
+      }
+    }
+
+    async function renderCurrent() {
+      const row = Screens.filtered[Screens.idx] || null;
+      qs('navPill').textContent = `${Screens.filtered.length ? Screens.idx + 1 : 0}/${Screens.filtered.length}`;
+      qs('shownPill').textContent = `shown: ${Screens.filtered.length}/${Screens.rows.length}`;
+      qs('changedPill').textContent = `changed: ${Screens.changed.size}`;
+      qs('currentFile').textContent = row ? row.file : '-';
+      qs('fileVal').textContent = row ? row.file : '-';
+      qs('urlVal').textContent = row ? (row.page_url || '-') : '-';
+      qs('predVal').textContent = row ? (row.top_label || '-') : '-';
+      qs('probVal').textContent = row && row.top_prob != null ? Number(row.top_prob).toFixed(4) : '-';
+      qs('manualVal').textContent = row ? (manualValue(row) || '-') : '-';
+      qs('runVal').textContent = Screens.runId == null ? '-' : String(Screens.runId);
+      buildManualChecks(row ? manualValue(row) : '');
+
+      const wrap = qs('previewWrap');
+      wrap.innerHTML = '';
+      if (!row) {
+        wrap.innerHTML = '<div class="previewPlaceholder">no rows</div>';
       } else {
-        alert("Can't map this path to server roots.");
-      }
-    };
-  }
-
-  async function jsonlLoad() {
-    const p = document.getElementById("jsonlPath").value.trim();
-    if (!p) return;
-    localStorage.setItem("wh_jsonl_path", p);
-
-    setJsonlStatus("loading…");
-    JSONL.items = [];
-    JSONL.filtered = [];
-    JSONL.active = null;
-    JSONL.ruleSet = new Set();
-    JSONL.labelSet = new Set();
-    JSONL.mlPredSet = new Set();
-
-    const r = await fetch(`/api/jsonl?file=${encodeURIComponent(p)}`);
-    if (!r.ok) {
-      setJsonlStatus(`HTTP ${r.status}`);
-      alert(`JSONL load failed: HTTP ${r.status}`);
-      return;
-    }
-
-    const text = await r.text();
-    const lines = text.split(/\r?\n/).filter((l) => l.trim().length);
-
-    let id = 0;
-    for (const line of lines) {
-      let obj = null;
-      try {
-        obj = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      const base = normalizeJsonlEntry(obj);
-
-      const spans = Array.isArray(base.spans) ? base.spans : [];
-      for (const s of spans) {
-        const item = {
-          __id: ++id,
-          rule_name: s.rule_name || s.rule || "",
-          label: s.label || "",
-          value: s.value || "",
-          entropy_h: s.entropy_h ?? null,
-          entropy_total_bits: s.entropy_total_bits ?? null,
-          path: base.path || "",
-          line: base.line,
-          text: base.text || "",
-          start: s.start,
-          end: s.end,
-          ml_pred_label: base.ml_pred_label || "",
-          ml_pred_score:
-            typeof base.ml_pred_score === "number"
-              ? base.ml_pred_score
-              : (base.ml_pred_score != null && !isNaN(Number(base.ml_pred_score)))
-                ? Number(base.ml_pred_score)
-                : null,
+        const src = await resolveImageSrc(row.file);
+        const img = document.createElement('img');
+        img.alt = row.file || 'screenshot';
+        img.src = src;
+        img.onerror = () => {
+          wrap.innerHTML = `<div class="previewPlaceholder">image failed: ${escHtml(src)}</div>`;
         };
-        JSONL.items.push(item);
-        if (item.rule_name) JSONL.ruleSet.add(item.rule_name);
-        if (item.label) JSONL.labelSet.add(item.label);
-        if (item.ml_pred_label) JSONL.mlPredSet.add(item.ml_pred_label);
+        img.onclick = () => openModal(src);
+        wrap.appendChild(img);
       }
+
+      document.querySelectorAll('#manualChecks input').forEach(inp => {
+        inp.addEventListener('change', () => {
+          if (!row) return;
+          Screens.changed.set(row.id, inp.value);
+          qs('manualVal').textContent = inp.value;
+          qs('changedPill').textContent = `changed: ${Screens.changed.size}`;
+          renderThumbs();
+        });
+      });
     }
 
-    const selRule = document.getElementById("jsonlFilterRule");
-    const selLabel = document.getElementById("jsonlFilterLabel");
-    selRule.innerHTML = `<option value="">rule_name: (all)</option>`;
-    selLabel.innerHTML = `<option value="">label: (all)</option>`;
-
-    [...JSONL.ruleSet].sort().forEach((v) => {
-      const o = document.createElement("option");
-      o.value = v;
-      o.textContent = v;
-      selRule.appendChild(o);
-    });
-
-    [...JSONL.labelSet].sort().forEach((v) => {
-      const o = document.createElement("option");
-      o.value = v;
-      o.textContent = v;
-      selLabel.appendChild(o);
-    });
-
-    setJsonlStatus(`loaded: ${JSONL.items.length}`);
-    jsonlApplyFilters();
-  }
-
-  function jsonlClear() {
-    JSONL.items = [];
-    JSONL.filtered = [];
-    JSONL.active = null;
-    document.getElementById("jsonlTbody").innerHTML = "";
-    document.getElementById("jsonlCountPill").textContent = "0";
-    document.getElementById("jsonlShownPill").textContent = "shown: 0";
-    setJsonlStatus("cleared");
-    jsonlRenderSelected();
-  }
-
-  document.getElementById("jsonlTable").querySelector("thead").addEventListener("click", (ev) => {
-    const th = ev.target.closest("th");
-    if (!th) return;
-    const col = th.dataset.col;
-    if (!col) return;
-
-    if (JSONL.sort.col === col) {
-      JSONL.sort.dir = JSONL.sort.dir === "asc" ? "desc" : "asc";
-    } else {
-      JSONL.sort.col = col;
-      JSONL.sort.dir = "asc";
+    async function renderThumbs() {
+      const root = qs('thumbs');
+      root.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      const max = Math.min(Screens.filtered.length, 300);
+      for (let i = 0; i < max; i++) {
+        const row = Screens.filtered[i];
+        const card = document.createElement('div');
+        card.className = 'thumb' + (i === Screens.idx ? ' active' : '');
+        card.onclick = () => { Screens.idx = i; renderCurrent(); renderThumbs(); };
+        const src = await resolveImageSrc(row.file);
+        const manual = manualValue(row);
+        card.innerHTML = `
+          <img alt="thumb" src="${escHtml(src)}">
+          <div class="t1 mono">${escHtml(shortPath(row.file))}</div>
+          <div class="t2">pred: ${escHtml(row.top_label || '-')}</div>
+          <div class="t2">manual: ${escHtml(manual || '-')}</div>
+        `;
+        frag.appendChild(card);
+      }
+      root.appendChild(frag);
     }
-    jsonlApplyFilters();
-  });
 
-  document.getElementById("jsonlLoad").onclick = jsonlLoad;
-  document.getElementById("jsonlClear").onclick = jsonlClear;
-  document.getElementById("jsonlFilterRule").onchange = jsonlApplyFilters;
-  document.getElementById("jsonlFilterLabel").onchange = jsonlApplyFilters;
-  document.getElementById("jsonlSearch").oninput = jsonlApplyFilters;
+    function applyScreenFilters() {
+      const q = qs('screenSearch').value.trim().toLowerCase();
+      const man = qs('manualFilter').value;
+      const pred = qs('predFilter').value;
+      Screens.filtered = Screens.rows.filter(r => {
+        const textOk = !q || `${r.file || ''}\n${r.page_url || ''}`.toLowerCase().includes(q);
+        const m = manualValue(r);
+        const manOk = !man || (man === '__none__' ? !m : m === man);
+        const p = r.top_label || '';
+        const predOk = !pred || (pred === '__none__' ? !p : p === pred);
+        return textOk && manOk && predOk;
+      });
+      if (Screens.idx >= Screens.filtered.length) Screens.idx = 0;
+      renderCurrent();
+      renderThumbs();
+    }
 
-  document.getElementById("jsonlPath").value =
-    localStorage.getItem("wh_jsonl_path") || "../../sensitive_info.post.ml.jsonl";
+    async function saveCurrent() {
+      const row = Screens.filtered[Screens.idx];
+      if (!row) return;
+      const label = manualValue(row);
+      if (!label) throw new Error('manual label is empty');
+      const resp = await fetch(`/api/db/screenshots/${row.id}/label`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_label: label, local_path: row.file, updated_by: 'ui' })
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      row.user_label = label;
+      Screens.changed.delete(row.id);
+      qs('changedPill').textContent = `changed: ${Screens.changed.size}`;
+      setScreenStatus('saved', 'ok');
+      renderThumbs();
+    }
 
-  initScreens();
+    function downloadAnnotations() {
+      const lines = [['file', 'user_label'].map(csvEsc).join(',')];
+      for (const r of [...Screens.rows].sort((a,b) => String(a.file).localeCompare(String(b.file)))) {
+        const label = manualValue(r);
+        if (label) lines.push([r.file, label].map(csvEsc).join(','));
+      }
+      const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'annotations.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
 
-  window.addEventListener("keydown", async (ev) => {
-    const tag = ev.target && ev.target.tagName ? ev.target.tagName.toLowerCase() : "";
-    if (tag === "input" || tag === "select" || tag === "textarea") return;
-
-    if (ev.key === "ArrowLeft") {
-      ev.preventDefault();
-      nextItem(-1);
-    } else if (ev.key === "ArrowRight") {
-      ev.preventDefault();
-      nextItem(+1);
-    } else if (ev.key === "0") {
-      ev.preventDefault();
-      clearLabel();
-    } else if (/^[1-9]$/.test(ev.key)) {
-      ev.preventDefault();
-      toggleLabelByIndex(Number(ev.key));
-    } else if (ev.key === "s" || ev.key === "S") {
-      ev.preventDefault();
+    async function initScreens() {
       try {
-        await saveToServer();
+        setScreenStatus('loading…', 'warn');
+        const latest = await fetchJson('/api/db/latest_run');
+        if (!latest || latest.id == null) {
+          setScreenStatus('no images run', 'warn');
+          return;
+        }
+        Screens.runId = latest.id;
+        qs('reportMeta').textContent = `images run: ${latest.id} · target: ${latest.target || '.'}`;
+        const rows = await fetchJson(`/api/db/screenshots?run_id=${encodeURIComponent(Screens.runId)}`);
+        Screens.rows = Array.isArray(rows) ? rows : [];
+        const manualVals = [...new Set(Screens.rows.map(r => manualValue(r)).filter(Boolean))].sort();
+        const predVals = [...new Set(Screens.rows.map(r => r.top_label).filter(Boolean))].sort();
+        const mf = qs('manualFilter');
+        const pf = qs('predFilter');
+        for (const v of manualVals) mf.insertAdjacentHTML('beforeend', `<option value="${escHtml(v)}">manual: ${escHtml(v)}</option>`);
+        for (const v of predVals) pf.insertAdjacentHTML('beforeend', `<option value="${escHtml(v)}">pred: ${escHtml(v)}</option>`);
+        applyScreenFilters();
+        setScreenStatus(`loaded: ${Screens.rows.length}`, 'ok');
       } catch (e) {
-        alert(`Save failed: ${e}`);
+        setScreenStatus(String(e), 'warn');
       }
-    } else if (ev.key === "Escape") {
-      closeZoom();
     }
-  });
-</script>
-</body>
 
-</html>
-'''
-path = Path('/mnt/data/prediction_output_template_fixed.html')
-path.write_text(html, encoding='utf-8')
-print(path)
-print("written", path.stat().st_size, "bytes")
-    
-</body>
+    qs('screenSearch').addEventListener('input', applyScreenFilters);
+    qs('manualFilter').addEventListener('change', applyScreenFilters);
+    qs('predFilter').addEventListener('change', applyScreenFilters);
+    qs('prevBtn').addEventListener('click', () => { if (!Screens.filtered.length) return; Screens.idx = (Screens.idx - 1 + Screens.filtered.length) % Screens.filtered.length; renderCurrent(); renderThumbs(); });
+    qs('nextBtn').addEventListener('click', () => { if (!Screens.filtered.length) return; Screens.idx = (Screens.idx + 1) % Screens.filtered.length; renderCurrent(); renderThumbs(); });
+    qs('saveBtn').addEventListener('click', async () => { try { await saveCurrent(); } catch (e) { alert(`Save failed: ${e}`); } });
+    qs('downloadBtn').addEventListener('click', downloadAnnotations);
+    qs('copyPredBtn').addEventListener('click', () => {
+      const row = Screens.filtered[Screens.idx];
+      if (!row || !row.top_label) return;
+      Screens.changed.set(row.id, row.top_label);
+      renderCurrent();
+      renderThumbs();
+    });
+    qs('clearManualBtn').addEventListener('click', () => {
+      const row = Screens.filtered[Screens.idx];
+      if (!row) return;
+      Screens.changed.delete(row.id);
+      row.user_label = '';
+      renderCurrent();
+      renderThumbs();
+    });
 
+    const Findings = {
+      items: [],
+      filtered: [],
+      active: null,
+      sort: { col: 'rule_name', dir: 'asc' },
+      runCache: new Map(),
+    };
+
+    function setFindingStatus(msg, cls) {
+      const el = qs('findingStatus');
+      el.textContent = msg;
+      el.className = `pill ${cls || 'warn'}`;
+    }
+
+    function normalizeFinding(source, row) {
+      if (source === 'analysis') {
+        return {
+          id: row[0],
+          path: row[1] || '',
+          stage: row[2] || '',
+          type: row[3] || '',
+          value: row[4] || '',
+          ml_label: row[5] || '',
+          ml_score: row[6],
+          final_label: row[7] || '',
+          rule_name: row[3] || '',
+          label: row[2] || '',
+          ml_pred_label: row[7] || row[5] || '',
+          ml_pred_score: row[6],
+          line: null,
+          text: row[4] || '',
+        };
+      }
+      return {
+        id: row[0],
+        path: row[1] || '',
+        type: row[2] || '',
+        rule_name: row[3] || row[2] || '',
+        value: row[4] || '',
+        line: row[5],
+        label: row[2] || '',
+        ml_pred_label: '',
+        ml_pred_score: null,
+        text: row[4] || '',
+      };
+    }
+
+    async function fetchRuns() {
+      const rows = await fetchJson('/api/db/runs');
+      return Array.isArray(rows) ? rows : [];
+    }
+
+    async function loadFindingsForRun(source, runId) {
+      const key = `${source}:${runId}`;
+      if (Findings.runCache.has(key)) return Findings.runCache.get(key);
+      const endpoint = source === 'analysis' ? 'analysis_findings' : 'raw_findings';
+      const rows = await fetchJson(`/api/db/${endpoint}?run_id=${encodeURIComponent(runId)}`);
+      const norm = (Array.isArray(rows) ? rows : []).map(r => normalizeFinding(source, r));
+      Findings.runCache.set(key, norm);
+      return norm;
+    }
+
+    async function autoFindRun(source) {
+      const runs = await fetchRuns();
+      const preferredModes = source === 'analysis' ? ['text_analyze', 'scan', 'assets'] : ['scan', 'assets', 'text_analyze'];
+      const sorted = [...runs].sort((a, b) => {
+        const ai = preferredModes.indexOf(a[2]);
+        const bi = preferredModes.indexOf(b[2]);
+        const ap = ai === -1 ? 99 : ai;
+        const bp = bi === -1 ? 99 : bi;
+        if (ap !== bp) return ap - bp;
+        return b[0] - a[0];
+      });
+      for (const r of sorted) {
+        const runId = r[0];
+        try {
+          const items = await loadFindingsForRun(source, runId);
+          if (items.length) return { runId, items, mode: r[2] };
+        } catch (_) {}
+      }
+      return { runId: null, items: [], mode: null };
+    }
+
+    function highlightText(text, needle) {
+      const s = String(text || '');
+      const n = String(needle || '');
+      if (!n) return escHtml(s);
+      const idx = s.toLowerCase().indexOf(n.toLowerCase());
+      if (idx < 0) return escHtml(s);
+      return `${escHtml(s.slice(0, idx))}<span class="hl">${escHtml(s.slice(idx, idx + n.length))}</span>${escHtml(s.slice(idx + n.length))}`;
+    }
+
+    function renderFindingSelected() {
+      const it = Findings.active;
+      qs('selLabel').textContent = it ? (it.label || '-') : '-';
+      qs('selMlPred').textContent = it ? (it.ml_pred_label || '-') : '-';
+      qs('selMlScore').textContent = it && it.ml_pred_score != null ? Number(it.ml_pred_score).toFixed(4) : '-';
+      qs('selValue').textContent = it ? (it.value || '-') : '-';
+      qs('selRule').textContent = it ? (it.rule_name || '-') : '-';
+      qs('selPath').textContent = it ? (it.path || '-') : '-';
+      qs('selLine').textContent = it ? (it.line ?? '-') : '-';
+      qs('selText').innerHTML = it ? highlightText(it.text || it.value || '', it.value || '') : '(select a row)';
+    }
+
+    function renderFindingTable() {
+      const tb = qs('findingBody');
+      tb.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      const rows = Findings.filtered.slice(0, 2000);
+      for (const it of rows) {
+        const tr = document.createElement('tr');
+        if (Findings.active && Findings.active.id === it.id) tr.className = 'active';
+        tr.innerHTML = `
+          <td>${escHtml(it.rule_name || '')}</td>
+          <td class="mono">${escHtml(it.label || '')}</td>
+          <td class="mono">${escHtml(it.ml_pred_label || '')}</td>
+          <td class="mono">${it.ml_pred_score != null ? escHtml(Number(it.ml_pred_score).toFixed(4)) : ''}</td>
+          <td class="mono">${escHtml(it.value || '')}</td>
+          <td class="mono">${escHtml(shortPath(it.path || ''))}</td>
+          <td class="mono">${it.line ?? ''}</td>`;
+        tr.onclick = () => { Findings.active = it; renderFindingSelected(); renderFindingTable(); };
+        frag.appendChild(tr);
+      }
+      tb.appendChild(frag);
+    }
+
+    function applyFindingFilters() {
+      const rule = qs('findingRule').value;
+      const label = qs('findingLabel').value;
+      const search = qs('findingSearch').value.trim().toLowerCase();
+      const { col, dir } = Findings.sort;
+      const arr = Findings.items.filter(it => {
+        const ruleOk = !rule || it.rule_name === rule;
+        const labelOk = !label || it.label === label;
+        const hay = `${it.value || ''}\n${it.path || ''}\n${it.text || ''}\n${it.rule_name || ''}\n${it.label || ''}`.toLowerCase();
+        const searchOk = !search || hay.includes(search);
+        return ruleOk && labelOk && searchOk;
+      });
+      arr.sort((a,b) => {
+        let av = a[col];
+        let bv = b[col];
+        if (col === 'ml_pred_score' || col === 'line') {
+          av = Number(av) || 0;
+          bv = Number(bv) || 0;
+          return dir === 'asc' ? av - bv : bv - av;
+        }
+        av = String(av || '');
+        bv = String(bv || '');
+        return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      });
+      Findings.filtered = arr;
+      qs('findingCount').textContent = String(Findings.items.length);
+      qs('findingShown').textContent = `shown: ${Findings.filtered.length}`;
+      if (!Findings.active || !Findings.filtered.some(x => x.id === Findings.active.id)) Findings.active = Findings.filtered[0] || null;
+      renderFindingSelected();
+      renderFindingTable();
+    }
+
+    function refillFindingFilters() {
+      const ruleSel = qs('findingRule');
+      const labelSel = qs('findingLabel');
+      const rules = [...new Set(Findings.items.map(x => x.rule_name).filter(Boolean))].sort();
+      const labels = [...new Set(Findings.items.map(x => x.label).filter(Boolean))].sort();
+      ruleSel.innerHTML = '<option value="">rule/type: (all)</option>';
+      labelSel.innerHTML = '<option value="">label/stage: (all)</option>';
+      for (const v of rules) ruleSel.insertAdjacentHTML('beforeend', `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+      for (const v of labels) labelSel.insertAdjacentHTML('beforeend', `<option value="${escHtml(v)}">${escHtml(v)}</option>`);
+    }
+
+    async function loadFindings() {
+      try {
+        const source = qs('findingSource').value;
+        localStorage.setItem('wh_finding_source', source);
+        setFindingStatus('loading…', 'warn');
+        let runId = qs('findingRunId').value.trim();
+        let items = [];
+        let mode = null;
+        if (runId) {
+          items = await loadFindingsForRun(source, Number(runId));
+        } else {
+          const auto = await autoFindRun(source);
+          runId = auto.runId;
+          items = auto.items;
+          mode = auto.mode;
+          qs('findingRunId').value = runId != null ? String(runId) : '';
+        }
+        Findings.items = items;
+        Findings.filtered = [];
+        Findings.active = null;
+        refillFindingFilters();
+        applyFindingFilters();
+        qs('findingResolvedRun').textContent = `run: ${runId != null ? runId : '-'}` + (mode ? ` (${mode})` : '');
+        setFindingStatus(`loaded: ${items.length}`, items.length ? 'ok' : 'warn');
+      } catch (e) {
+        setFindingStatus(String(e), 'warn');
+      }
+    }
+
+    function clearFindings() {
+      Findings.items = [];
+      Findings.filtered = [];
+      Findings.active = null;
+      qs('findingBody').innerHTML = '';
+      qs('findingCount').textContent = '0';
+      qs('findingShown').textContent = 'shown: 0';
+      qs('findingResolvedRun').textContent = 'run: -';
+      renderFindingSelected();
+      setFindingStatus('cleared', 'warn');
+    }
+
+    qs('findingLoad').addEventListener('click', loadFindings);
+    qs('findingClear').addEventListener('click', clearFindings);
+    qs('findingRule').addEventListener('change', applyFindingFilters);
+    qs('findingLabel').addEventListener('change', applyFindingFilters);
+    qs('findingSearch').addEventListener('input', applyFindingFilters);
+    qs('findingTable').querySelector('thead').addEventListener('click', (ev) => {
+      const th = ev.target.closest('th');
+      if (!th) return;
+      const col = th.dataset.col;
+      if (!col) return;
+      if (Findings.sort.col === col) Findings.sort.dir = Findings.sort.dir === 'asc' ? 'desc' : 'asc';
+      else { Findings.sort.col = col; Findings.sort.dir = 'asc'; }
+      applyFindingFilters();
+    });
+    qs('findingSource').value = localStorage.getItem('wh_finding_source') || 'analysis';
+
+    qs('openPathBtn').addEventListener('click', async () => {
+      const it = Findings.active;
+      if (!it || !it.path) return;
+      const src = await resolveImageSrc(it.path);
+      window.open(src, '_blank', 'noopener');
+    });
+    qs('copyValueBtn').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(String((Findings.active && Findings.active.value) || '')); } catch { alert('Copy failed'); }
+    });
+    qs('copyPathBtn').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(String((Findings.active && Findings.active.path) || '')); } catch { alert('Copy failed'); }
+    });
+
+    function openModal(src) {
+      qs('modalImg').src = src;
+      qs('modal').classList.add('open');
+    }
+    function closeModal() { qs('modal').classList.remove('open'); }
+    qs('modalClose').addEventListener('click', closeModal);
+    qs('modal').addEventListener('click', (e) => { if (e.target === qs('modal')) closeModal(); });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+      const tag = (e.target && e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (e.key === 'ArrowLeft') qs('prevBtn').click();
+      if (e.key === 'ArrowRight') qs('nextBtn').click();
+    });
+
+    initScreens();
+    loadFindings();
+  </script>
+</body>
 </html>
