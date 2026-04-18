@@ -147,11 +147,7 @@ impl TextClassifier {
             .with_model_from_file(cfg.model_path())
             .map_err(|e| anyhow!("with_model_from_file: {e}"))?;
 
-        let model_type = metadata
-            .model_type
-            .as_deref()
-            .unwrap_or("hf_transformer")
-            .to_string();
+        let model_type = "custom_charcnn".to_string();
 
         let (backend, max_length) = match model_type.as_str() {
             "custom_charcnn" => {
@@ -174,13 +170,25 @@ impl TextClassifier {
 
                 let mut stoi = BTreeMap::new();
                 for (k, v) in vocab.stoi {
+                    match k.as_str() {
+                        "<PAD>" | "<pad>" | "[PAD]" | "<UNK>" | "<unk>" | "[UNK]" => {
+                            continue;
+                        }
+                        _ => {}
+                    }
+
                     let mut chars = k.chars();
                     let ch = chars
                         .next()
                         .ok_or_else(|| anyhow!("empty key in char_vocab.json"))?;
+
                     if chars.next().is_some() {
-                        bail!("char_vocab key must be exactly one character, got {:?}", k);
+                        bail!(
+                            "char_vocab key must be exactly one character or a supported special token, got {:?}",
+                            k
+                        );
                     }
+
                     stoi.insert(ch, v);
                 }
 

@@ -103,13 +103,13 @@ main() {
     lib_abs="$(abspath "$lib_path")"
     lib_dir_abs="$(abspath "$(dirname "$lib_abs")")"
 
-    local vision_model text_model_dir text_model text_metadata text_tokenizer
+    local vision_model text_model_dir text_model text_metadata text_char_vocab
 
     vision_model="$(resolve_if_exists "${repo_abs}/src/asset/ml/eyehound_mobilenet.onnx" || true)"
     text_model_dir="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier" || true)"
     text_model="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier/model.onnx" || true)"
     text_metadata="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier/export_metadata.json" || true)"
-    text_tokenizer="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier/tokenizer/tokenizer.json" || true)"
+    text_char_vocab="$(resolve_if_exists "${repo_abs}/src/asset/ml/text_secret_classifier/char_vocab.json" || true)"
 
     local out="${repo_abs}/${OUT_NAME}"
 
@@ -162,15 +162,19 @@ EOF
 EOF
     fi
 
-    if [[ -n "${text_tokenizer}" ]]; then
-        cat >>"$out" <<EOF
-export WEBHOUND_TEXT_TOKENIZER="${text_tokenizer}"
+    cat >>"$out" <<'EOF'
+export WEBHOUND_TEXT_MODEL_TYPE="custom_charcnn"
 EOF
-    else
-        cat >>"$out" <<'EOF'
-# export WEBHOUND_TEXT_TOKENIZER="/path/to/WebHound/assets/ml/text_secret_classifier/tokenizer/tokenizer.json"
+
+if [[ -n "${text_char_vocab}" ]]; then
+    cat >>"$out" <<EOF
+export WEBHOUND_TEXT_CHAR_VOCAB="${text_char_vocab}"
 EOF
-    fi
+else
+    cat >>"$out" <<'EOF'
+# export WEBHOUND_TEXT_CHAR_VOCAB="/path/to/WebHound/assets/ml/text_secret_classifier/char_vocab.json"
+EOF
+fi
 
     echo "Создан: $out"
     echo "   WEBHOUND_ROOT=$repo_abs"
@@ -201,11 +205,13 @@ EOF
         echo "   WEBHOUND_TEXT_METADATA=NOT FOUND"
     fi
 
-    if [[ -n "${text_tokenizer}" ]]; then
-        echo "   WEBHOUND_TEXT_TOKENIZER=$text_tokenizer"
-    else
-        echo "   WEBHOUND_TEXT_TOKENIZER=NOT FOUND"
-    fi
+    echo "   WEBHOUND_TEXT_MODEL_TYPE=custom_charcnn"
+
+if [[ -n "${text_char_vocab}" ]]; then
+    echo "   WEBHOUND_TEXT_CHAR_VOCAB=$text_char_vocab"
+else
+    echo "   WEBHOUND_TEXT_CHAR_VOCAB=NOT FOUND"
+fi
 
     echo ""
     echo "Использование:"

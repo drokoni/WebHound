@@ -255,10 +255,11 @@ enum Cmd {
   WebHound text-analyze ./example.com/sensitive_info.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR"
   WebHound text-analyze ./example.com/sensitive_info.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR" --out ./example.com/sensitive_info.ml.jsonl
   WebHound text-analyze ./example.com/sensitive_info.jsonl --model-dir "$WEBHOUND_TEXT_MODEL_DIR" --text-use-path-prefix
+  WebHound text-analyze --model-dir "$WEBHOUND_TEXT_MODEL_DIR" --storage db
 "#)]
     TextAnalyze {
         #[arg(value_name = "INPUT_JSONL")]
-        input: PathBuf,
+        input: Option<PathBuf>,
 
         #[arg(long, value_name = "DIR")]
         model_dir: PathBuf,
@@ -764,6 +765,10 @@ async fn main() -> Result<()> {
 
             match storage_mode {
                 StorageMode::Files => {
+                    let input = input.ok_or_else(|| {
+                        anyhow!("INPUT_JSONL обязателен при --storage files")
+                    })?;
+
                     let output_jsonl = out.unwrap_or_else(|| default_text_output_path(&input));
                     annotate_sensitive_info(
                         &model_dir,
@@ -795,11 +800,13 @@ async fn main() -> Result<()> {
                         Ok(()) => {
                             let _ = sqlite.finish_scan_run(text_run_id, "success");
 
-                            if let Some(output_jsonl) = out {
+                            if let (Some(input_jsonl), Some(output_jsonl)) =
+                                (input.as_ref(), out.as_ref())
+                            {
                                 annotate_sensitive_info(
                                     &model_dir,
-                                    &input,
-                                    &output_jsonl,
+                                    input_jsonl,
+                                    output_jsonl,
                                     text_use_path_prefix,
                                     text_max_length,
                                 )?;
